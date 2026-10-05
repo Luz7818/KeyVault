@@ -32,3 +32,20 @@
   显式把 `KV_VAULT_DIR` 指向不存在的临时目录，与真实环境解耦。
 - 同步事实口径：源文件 76 → 88 个 `.py`、13 837 → 15 593 行（10-04 统计后
   新模块入库所致，非本条改动产生），README / AGENTS.md / TESTING.md 已同步。
+
+## 2026-10-05 · GUI 剪贴板监控检测到候选却不落库（watch 接口对齐）
+
+- 现象：GUI「捕获 → 剪贴板监控」日志显示「检测到：…」，但审批队列和 secret
+  表都是空的——候选从未落盘。
+- 根因：GUI 向 `watch()` 传 `stop_event`/`on_event`，而签名里没有这两个参数，
+  调用必抛 `TypeError`；GUI 的 `except TypeError` 分支静默退化到
+  `_watch_fallback`——那个简化轮询只打日志，`spool` 被忽略，不写 inbox。
+- 修复：`watch()` 正式支持 `stop_event`（置位即优雅退出，轮询 sleep 换成
+  `Event.wait`）与 `on_event`（掩码摘要回调，不传照旧打印控制台）；
+  `_read_key()` 包异常保护（GUI 线程/pythonw 无控制台不炸）；
+  删除 `_watch_fallback` 与 `except TypeError` 分支。
+- 测试：新增 `TestGuiIntegration` 三条（on_event 回调且明文不外泄 /
+  stop_event 置位立即退出 / GUI 实参形态端到端 spool 进 inbox），
+  全量 545 → 548，`OK (skipped=2)` 实测。
+- 端到端实测：真 Win32Clipboard + PowerShell 写剪贴板 → watch 捕获 →
+  inbox 1 条待审 → 接受后 `created`，secret 表有记录；测试数据已清除。

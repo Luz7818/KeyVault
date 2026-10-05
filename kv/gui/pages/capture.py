@@ -109,43 +109,8 @@ class CapturePage(ttk.Frame):
                 window_hint=False, stop_event=self._watch_stop,
                 on_event=self._log_watch_safe,
             )
-        except TypeError:
-            self._watch_fallback(store, backend)
         except Exception as exc:
             self._log_watch_safe(f"错误：{exc}")
-
-    def _watch_fallback(self, store, backend) -> None:
-        """watch() 不支持 stop_event 时的简化轮询。"""
-        import time
-
-        from kv.capture.watch import _already_stored, _load_corrections
-        from kv.core import masking
-        from kv.detect import resolve
-        from kv.parse import pipeline
-
-        corr = _load_corrections(store)
-        last_seq = backend.sequence()
-        while not self._watch_stop.is_set():
-            time.sleep(1.0)
-            try:
-                seq = backend.sequence()
-                if seq == last_seq:
-                    continue
-                last_seq = seq
-                text = backend.read()
-                if not text or not text.strip():
-                    continue
-                result = pipeline.parse(text, source_hint="watch")
-                for cand in result.candidates:
-                    sha = masking.fingerprint(cand.canonical(), cand.kind)
-                    if _already_stored(store, sha):
-                        continue
-                    verdict = resolve.resolve(cand, corr)
-                    self._log_watch_safe(
-                        f"检测到：{verdict.platform}（{verdict.confidence}）{cand.preview('*')}",
-                    )
-            except Exception:
-                pass
 
     def _log_watch_safe(self, msg: str) -> None:
         self.after(0, lambda: self._log_watch(msg))

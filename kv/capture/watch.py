@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import hashlib
-import time
 from collections import deque
 
 from kv import PROGRAM, console
@@ -43,24 +42,38 @@ KEYS_HELP = (
 
 
 def _read_key() -> str:
-    """非阻塞读一个按键。没有可用输入就返回空串。"""
+    """非阻塞读一个按键。没有可用输入就返回空串。
+
+    GUI 后台线程或 pythonw（无控制台）里 kbhit 可能抛错——
+    监听循环不能因为按键探测而中断，一律按无输入处理。
+    """
     try:
         import msvcrt
-    except ImportError:
+        if not msvcrt.kbhit():
+            return ""
+        char = msvcrt.getwch()
+        if char in ("\x00", "\xe0"):
+            msvcrt.getwch()
+            return ""
+        return char.lower()
+    except Exception:
         return ""
-    if not msvcrt.kbhit():
-        return ""
-    char = msvcrt.getwch()
-    if char in ("\x00", "\xe0"):
-        msvcrt.getwch()
-        return ""
-    return char.lower()
 
 
 def watch(store, backend: ClipboardBackend, *, interval: float = DEFAULT_INTERVAL,
           spool: bool = False, auto: bool = False, window_hint: bool = True,
-          actor: str = "watch", max_ticks: int = 0) -> int:
-    """监听剪切板。max_ticks > 0 时跑够那么多轮就返回（测试用）。"""
+          actor: str = "watch", max_ticks: int = 0,
+          stop_event=None, on_event=None) -> int:
+    """监听剪切板。max_ticks > 0 时跑够那么多轮就返回（测试用）。
+
+    stop_event：threading.Event，置位即优雅退出（GUI 的停止按钮用）。
+    on_event：每捕获一批候选回调一次，收一行掩码摘要（GUI 日志用）；
+    不传则照旧打印到控制台。两者都不影响 spool/队列的落盘语义。
+    """
+    import threading
+
+    if stop_event is None:
+        stop_event = threading.Event()
     corrections = _load_corrections(store)
     queue: list[reviewops.PendingItem] = []
     seen: deque[str] = deque(maxlen=SEEN_RING_SIZE)
@@ -68,14 +81,16 @@ def watch(store, backend: ClipboardBackend, *, interval: float = DEFAULT_INTERVA
     captured = 0
     last_sequence = backend.sequence()
 
-    _print_banner(spool=spool, auto=auto, window_hint=window_hint)
+    if on_event is None:
+        _print_banner(spool=spool, auto=auto, window_hint=window_hint)
 
     try:
         while True:
             ticks += 1
             if max_ticks and ticks > max_ticks:
                 break
-            time.sleep(interval)
+            if stop_event.wait(interval):
+                break
 
             if ticks % SWEEP_EVERY_TICKS == 0:
                 sweep_due_wipes(store, backend, actor=actor)
@@ -91,7 +106,8 @@ def watch(store, backend: ClipboardBackend, *, interval: float = DEFAULT_INTERVA
             # _tick 返回它自己读到的序号。主循环末尾再读一次会引入竞态：
             # 两次读之间剪切板若变化，last_sequence 会被设成新值，那次变化就被吞掉了。
             count, last_sequence = _tick(store, backend, corrections, queue, seen,
-                                         last_sequence, spool=spool, window_hint=window_hint)
+                                         last_sequence, spool=spool, window_hint=window_hint,
+                                         on_event=on_event)
             captured += count
     except KeyboardInterrupt:
         console.echo("")
@@ -106,7 +122,7 @@ def watch(store, backend: ClipboardBackend, *, interval: float = DEFAULT_INTERVA
 
 def _tick(store, backend: ClipboardBackend, corrections: CorrectionSet,
           queue: list, seen: deque, last_sequence: int, *,
-          spool: bool, window_hint: bool) -> tuple[int, int]:
+          spool: bool, window_hint: bool, on_event=None) -> tuple[int, int]:
     """一轮轮询。返回 (这一轮新捕获的候选数, 本轮读到的序号)。
 
     序号没变就什么都不做 —— GetClipboardSequenceNumber 不打开剪切板，
@@ -133,7 +149,7 @@ def _tick(store, backend: ClipboardBackend, corrections: CorrectionSet,
         if spool:
             reviewops.spool(store, item)
         queue.append(item)
-    _announce(items, spool=spool)
+    _announce(items, spool=spool, on_event=on_event)
     return len(items), sequence
 
 
@@ -162,12 +178,20 @@ def _now() -> str:
     return clock.now_iso()
 
 
-def _announce(items, *, spool: bool) -> None:
-    """打印一行摘要。**只打印掩码预览和平台，绝不打印剪切板原文。**"""
+def _announce(items, *, spool: bool, on_event=None) -> None:
+    """每个候选发一行摘要。**只打印掩码预览和平台，绝不打印剪切板原文。**
+
+    传了 on_event（GUI 日志）就回调，否则打到控制台——两条路发同一份内容，
+    只是格式一个面向列表框、一个面向终端。
+    """
     for item in items:
         preview = item.candidate.preview(console.mask_char(), *item.verdict.mask_style)
+        summary = _summarize(item)
         where = "已落盘待审" if spool else "已入内存队列"
-        console.echo(f"  ⚡ {preview}  ->  {_summarize(item)}  [{where}]")
+        if on_event is not None:
+            on_event(f"检测到：{summary}  {preview}（{where}）")
+        else:
+            console.echo(f"  ⚡ {preview}  ->  {summary}  [{where}]")
 
 
 def _summarize(item) -> str:

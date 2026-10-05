@@ -185,5 +185,90 @@ class TestSpoolMode(unittest.TestCase):
         self.assertEqual(len(inbox_rows), count)
 
 
+class TestGuiIntegration(unittest.TestCase):
+    """GUI 剪贴板监控的调用形态：stop_event 停止、on_event 回调、spool 落盘。
+
+    回归背景：GUI 曾向 watch() 传 stop_event/on_event，而签名里没有这两个
+    参数，TypeError 后静默退化到一个只打日志、不写 inbox 的简化循环——
+    检测到了却永远不落盘。
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.vault = Path(self._tmp.name) / "vault"
+        self.store = _make_store(self.vault)
+        self.addCleanup(self._tmp.cleanup)
+        self._saved_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        self.addCleanup(self._restore_stdout)
+
+    def _restore_stdout(self):
+        sys.stdout = self._saved_stdout
+
+    def test_on_event_receives_masked_summary(self):
+        """on_event 收到掩码摘要，明文不出现在回调里。"""
+        events: list[str] = []
+        backend = FakeClipboard(script=[(1, DOTENV)])
+        corrections = CorrectionSet.empty()
+        queue, seen = [], []
+        count, _ = watchmod._tick(
+            self.store, backend, corrections, queue, seen,
+            last_sequence=0, spool=True, window_hint=False,
+            on_event=events.append,
+        )
+        self.assertGreater(count, 0)
+        self.assertEqual(len(events), count)
+        joined = "\n".join(events)
+        self.assertIn("检测到", joined)
+        self.assertNotIn(SECRET, joined)
+        # 走了回调就不该再往控制台打 ⚡ 行
+        self.assertNotIn("⚡", sys.stdout.getvalue())
+
+    def test_preset_stop_event_exits_immediately(self):
+        """stop_event 已置位 → watch() 立即返回，不死循环。"""
+        import threading
+
+        backend = FakeClipboard(script=[(1, "nothing")])
+        stop = threading.Event()
+        stop.set()
+        code = watchmod.watch(
+            self.store, backend, interval=0.001,
+            window_hint=False, stop_event=stop,
+        )
+        self.assertEqual(code, 0)
+
+    def test_gui_shape_spools_and_announces(self):
+        """按 GUI 的实参形态跑 watch：检测到的候选落进审批队列（inbox）。"""
+        import threading
+        import time
+
+        events: list[str] = []
+        stop = threading.Event()
+        backend = FakeClipboard()
+
+        def producer():
+            # 等 watch 起来并记下初始序号，再模拟一次真实复制
+            time.sleep(0.05)
+            backend.write(DOTENV)
+            time.sleep(0.2)
+            stop.set()
+
+        t = threading.Thread(target=producer, daemon=True)
+        t.start()
+        code = watchmod.watch(
+            self.store, backend, interval=0.01, spool=True, auto=False,
+            window_hint=False, stop_event=stop,
+            on_event=events.append,
+        )
+        t.join()
+        self.assertEqual(code, 0)
+        self.assertTrue(events)
+        from kv.ops.review import pending_from_inbox
+
+        pending = pending_from_inbox(self.store)
+        self.assertGreater(len(pending), 0)
+        self.assertEqual(len(events), len(pending))
+
+
 if __name__ == "__main__":
     unittest.main()

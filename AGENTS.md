@@ -90,7 +90,7 @@ stdlib 零依赖）；外科手术式改动（不动无关代码，每行改动�
 
 | 项 | 值 | 复核命令 |
 |---|---|---|
-| 测试 | `Ran 545, OK (skipped=2)`，0 失败（2026-10-05 实测） | `python -I -m unittest discover -s tests -t .` |
+| 测试 | `Ran 548, OK (skipped=2)`，0 失败（2026-10-05 实测） | `python -I -m unittest discover -s tests -t .` |
 | 金标自测 | `selftest --golden` 全过 | `python kv.py selftest --golden` |
 | 静态检查 | 无 lint 配置（有意） | — |
 | CI | 无 | — |
