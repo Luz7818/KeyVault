@@ -46,11 +46,14 @@ def session(target: Path | str) -> Iterator[sqlite3.Connection]:
     conn = connect(target)
     try:
         conn.execute("BEGIN")
-        yield conn
-        conn.execute("COMMIT")
-    except BaseException:
-        conn.execute("ROLLBACK")
-        raise
+        try:
+            yield conn
+            conn.execute("COMMIT")
+        except BaseException:
+            # BEGIN 成功后事务必然存在；BEGIN 自身失败不能进这里，
+            # 否则 ROLLBACK 抛 no transaction is active，盖住真实错误。
+            conn.execute("ROLLBACK")
+            raise
     finally:
         conn.close()
 
@@ -123,16 +126,19 @@ def initialize(db_path: Path, *, canary_blob: bytes, canary_text: str) -> None:
     try:
         apply_schema(conn)
         conn.execute("BEGIN")
-        repo.bootstrap_meta(
-            conn,
-            schema_version=SCHEMA_VERSION,
-            created_at=clock.now_iso(),
-            canary_blob=canary_blob,
-            canary_text=canary_text,
-        )
-        conn.execute("COMMIT")
-    except BaseException:
-        conn.execute("ROLLBACK")
-        raise
+        try:
+            repo.bootstrap_meta(
+                conn,
+                schema_version=SCHEMA_VERSION,
+                created_at=clock.now_iso(),
+                canary_blob=canary_blob,
+                canary_text=canary_text,
+            )
+            conn.execute("COMMIT")
+        except BaseException:
+            # 与 session() 同理：ROLLBACK 只在 BEGIN 成功后执行，
+            # apply_schema 的失败要原样冒出去，不能被二次异常盖住。
+            conn.execute("ROLLBACK")
+            raise
     finally:
         conn.close()

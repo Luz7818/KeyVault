@@ -585,6 +585,60 @@ class TestVersionGate(VaultTestCase):
         self.assertTrue(db.is_initialized(self.store.db_path))
 
 
+class TestInitTransactionBoundary(unittest.TestCase):
+    """initialize 的事务边界：BEGIN 前失败要冒根因，BEGIN 后失败要回滚。
+
+    回归背景：曾有版本在 except 里无条件 ROLLBACK，apply_schema（BEGIN 之前）
+    失败时 ROLLBACK 自身抛 no transaction is active，把真实错误盖死。
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _init(self) -> None:
+        protector = PlaintextProtector()
+        db.initialize(
+            self.root / "vault.db",
+            canary_blob=protector.protect(dpapi.CANARY_TEXT.encode("utf-8")),
+            canary_text=dpapi.CANARY_TEXT,
+        )
+
+    def test_failure_before_begin_propagates_root_cause(self):
+        original = db.apply_schema
+
+        def broken(conn):
+            raise RuntimeError("schema 阶段的真实错误")
+
+        db.apply_schema = broken
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                self._init()
+        finally:
+            db.apply_schema = original
+        self.assertEqual(str(ctx.exception), "schema 阶段的真实错误")
+
+    def test_failure_in_transaction_rolls_back_meta(self):
+        original = repo.bootstrap_meta
+
+        def broken(conn, **kwargs):
+            raise RuntimeError("meta 阶段的真实错误")
+
+        repo.bootstrap_meta = broken
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                self._init()
+        finally:
+            repo.bootstrap_meta = original
+        self.assertEqual(str(ctx.exception), "meta 阶段的真实错误")
+        conn = db.connect(self.root / "vault.db")
+        try:
+            self.assertIsNone(repo.get_meta(conn, "schema_version"))
+        finally:
+            conn.close()
+
+
 @unittest.skipUnless(WINDOWS, "静息加密要用真 DPAPI")
 class TestAtRestEncryption(unittest.TestCase):
     """M0 验收的硬指标：用值去 grep 原始 DB 文件必须返回空。"""

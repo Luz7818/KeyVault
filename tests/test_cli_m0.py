@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -415,7 +416,17 @@ class TestListShowReveal(CliTestCase):
         self.assertIn("（空）", out)
 
     def test_list_on_absent_vault_reports_binding_exit_code(self):
-        code, out, err = self.run_cli(["list"], vault=False)
+        # 不传 --vault-dir 时会落到真实的 %LOCALAPPDATA% 路径；本机若 init 过
+        # vault，这条用例就假失败。把环境指到一个不存在的目录，与真实环境解耦。
+        saved = os.environ.get(paths.ENV_OVERRIDE)
+        os.environ[paths.ENV_OVERRIDE] = str(Path(self._tmp.name) / "absent-vault")
+        try:
+            code, out, err = self.run_cli(["list"], vault=False)
+        finally:
+            if saved is None:
+                os.environ.pop(paths.ENV_OVERRIDE, None)
+            else:
+                os.environ[paths.ENV_OVERRIDE] = saved
         self.assertEqual(code, errors.EXIT_BINDING)
         self.assertEqual(out, "")
         self.assertIn("kv init", err)

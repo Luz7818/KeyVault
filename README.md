@@ -6,7 +6,7 @@ kv 是一个纯 Python 实现的本地密钥保管 CLI 工具，用 Windows DPAP
 
 输入一条 `kv add ds sk-abc...`，值经 DPAPI 加密后写入 SQLite；`kv copy ds` 把明文放到剪贴板，30 秒后自动擦除；`kv scan ./repo` 扫描目录树，用已存指纹匹配泄露的密钥，输出文件名和行号。
 
-**543 条测试 · 76 个源文件 · 13 837 行 Python（复核：`python -I -m unittest discover -s tests -t .`）**
+**545 条测试 · 88 个源文件 · 15 593 行 Python（复核：`python -I -m unittest discover -s tests -t .`）**
 
 ## 30 秒跑通
 
