@@ -19,8 +19,8 @@ kv 依赖 Windows DPAPI（Data Protection API），仅支持 Windows。Linux/mac
 kv 是零依赖项目，不需要 `pip install`。把仓库克隆到本地即可：
 
 ```bash
-git clone <repo-url> new
-cd new
+git clone <repo-url> KeyVault
+cd KeyVault
 ```
 
 预期输出：无报错，目录里能看到 `kv.py`、`kv/`、`tests/`。
@@ -165,7 +165,7 @@ python -I -m unittest tests.test_your_module -v
 
 | 现象 / 报错原文 | 原因 | 处理 |
 |---|---|---|
-| `ModuleNotFoundError: No module named 'kv'` | 没有从仓库根运行 | `cd` 到 `new/` 目录再跑 |
+| `ModuleNotFoundError: No module named 'kv'` | 没有从仓库根运行 | `cd` 到 `KeyVault/` 目录再跑 |
 | `UnicodeDecodeError: 'cp936' codec can't decode` | Windows 默认编码 cp936，文件是 UTF-8 | 用 `python kv.py`（shim 会设 UTF-8），不要直接 `python -m kv` |
 | `BindingError: vault 不属于当前用户` | DPAPI 绑定检查失败 | 在同一个 Windows 账户下运行；不要复制 vault 到其他机器 |
 | `GateError: selftest golden corpus 未通过` | scan 要求先通过金标自测 | `python kv.py selftest --golden` |

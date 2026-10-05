@@ -13,7 +13,7 @@ CLI（`kv.py` → `kv/cli.py` 的 argparse 命令树）与桌面 GUI（`kv_gui.p
 ## 目录结构
 
 ```
-new/
+KeyVault/
 ├── kv/                主包（capture/ commands/ core/ crypto/ detect/ gui/ ops/ parse/）
 ├── tests/             测试套件（含金标语料 corpus/）
 ├── build/ dist/       PyInstaller 产物，不入库（.docsignore 已登记）
