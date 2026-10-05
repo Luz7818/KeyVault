@@ -67,15 +67,15 @@ PAD_LG = 24
 GAP = 10
 SIDEBAR_WIDTH = 208
 STATUS_HEIGHT = 30
-ROW_HEIGHT = 32
-CONTROL_HEIGHT = 36
+ROW_HEIGHT = 38
+CONTROL_HEIGHT = 38
 RADIUS = 10
 
 # 像素字号基线（scale=1 时），init() 按显示器放大
-_BODY_PX = 13
-_SMALL_PX = 12
-_HEADING_PX = 21
-_MONO_PX = 13
+_BODY_PX = 15
+_SMALL_PX = 13
+_HEADING_PX = 24
+_MONO_PX = 15
 
 
 def init(scale: float) -> None:
