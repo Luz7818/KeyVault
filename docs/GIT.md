@@ -4,7 +4,7 @@
 
 ## 分支与提交策略
 
-- 单 `main` 分支，本地开发直接提交（私有项目，无远端时推的是本机）。
+- 单 `main` 分支，推 `main` 即同步 GitHub 远端（公开仓库 `github.com/Luz7818/KeyVault`）。
 - **一批一提交**：一个提交 = 一个可回退单元；提交前跑 [TESTING.md](TESTING.md) 的全量 unittest。
 
 ## 必须入库 / 禁止上传

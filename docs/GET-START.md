@@ -19,7 +19,7 @@ kv 依赖 Windows DPAPI（Data Protection API），仅支持 Windows。Linux/mac
 kv 是零依赖项目，不需要 `pip install`。把仓库克隆到本地即可：
 
 ```bash
-git clone <repo-url> KeyVault
+git clone https://github.com/Luz7818/KeyVault.git KeyVault
 cd KeyVault
 ```
 

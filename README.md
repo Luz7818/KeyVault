@@ -55,7 +55,7 @@ Python 3.12+（stdlib only，零外部依赖）；Windows 10/11（DPAPI）；不
 
 ## 许可与引用
 
-私有项目，未发布许可证。
+代码在 GitHub 公开托管（github.com/Luz7818/KeyVault）；未附许可证，默认保留所有权利。
 
 ---
 
