@@ -8,7 +8,7 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
-from kv.gui.widgets import DataTable, FormDialog
+from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
 CORR_COLS = ("id", "kind", "pattern", "platform")
 CORR_HEADS = ("ID", "类型", "模式", "平台")
@@ -28,7 +28,9 @@ class CapturePage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        ttk.Label(self, text="捕获", font=theme.FONT_HEADING).pack(anchor="w")
+        PageHeader(self, "捕获", "剪贴板监听——候选先进审批队列，接受后才入库").pack(
+            anchor="w", pady=(0, theme.GAP),
+        )
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._watch_tab = ttk.Frame(nb, padding=theme.PAD)
@@ -47,19 +49,36 @@ class CapturePage(ttk.Frame):
     def _build_watch(self) -> None:
         bar = ttk.Frame(self._watch_tab)
         bar.pack(fill="x")
-        self._watch_btn = ttk.Button(bar, text="开始监控", command=self._toggle_watch)
+        self._watch_btn = ttk.Button(
+            bar, text="开始监控", style="Accent.TButton", command=self._toggle_watch,
+        )
         self._watch_btn.pack(side="left")
         ttk.Button(bar, text="清扫过期", command=self._do_sweep).pack(side="left", padx=theme.GAP)
-        self._watch_log = tk.Listbox(self._watch_tab, font=theme.FONT_SMALL, height=14)
+        self._watch_log = tk.Listbox(
+            self._watch_tab, font=theme.FONT_SMALL, height=14,
+            bg=theme.SURFACE, fg=theme.TEXT,
+            selectbackground=theme.TABLE_SELECT_BG, selectforeground=theme.TEXT,
+            activestyle="none",
+        )
+        theme.flat(self._watch_log)
         self._watch_log.pack(fill="both", expand=True, pady=(theme.GAP, 0))
 
     def _build_review(self) -> None:
         bar = ttk.Frame(self._review_tab)
         bar.pack(fill="x")
         ttk.Button(bar, text="加载待审", command=self._load_inbox).pack(side="left")
-        ttk.Button(bar, text="接受", command=lambda: self._review_action("accept")).pack(side="left", padx=theme.GAP)
+        ttk.Button(
+            bar, text="接受", style="Accent.TButton",
+            command=lambda: self._review_action("accept"),
+        ).pack(side="left", padx=theme.GAP)
         ttk.Button(bar, text="跳过", command=lambda: self._review_action("skip")).pack(side="left")
-        self._review_list = tk.Listbox(self._review_tab, font=theme.FONT_SMALL, height=12)
+        self._review_list = tk.Listbox(
+            self._review_tab, font=theme.FONT_SMALL, height=12,
+            bg=theme.SURFACE, fg=theme.TEXT,
+            selectbackground=theme.TABLE_SELECT_BG, selectforeground=theme.TEXT,
+            activestyle="none",
+        )
+        theme.flat(self._review_list)
         self._review_list.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._review_items: list[Any] = []
 
@@ -196,7 +215,12 @@ class CapturePage(ttk.Frame):
         win.geometry("300x400")
         win.transient(self)
         ttk.Label(win, text="选择平台：").pack(padx=12, pady=8, anchor="w")
-        lb = tk.Listbox(win, font=theme.FONT)
+        lb = tk.Listbox(
+            win, font=theme.FONT, bg=theme.SURFACE, fg=theme.TEXT,
+            selectbackground=theme.TABLE_SELECT_BG, selectforeground=theme.TEXT,
+            activestyle="none",
+        )
+        theme.flat(lb)
         lb.pack(fill="both", expand=True, padx=12)
         for p in platforms:
             lb.insert("end", p)

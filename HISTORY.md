@@ -49,3 +49,23 @@
   全量 545 → 548，`OK (skipped=2)` 实测。
 - 端到端实测：真 Win32Clipboard + PowerShell 写剪贴板 → watch 捕获 →
   inbox 1 条待审 → 接受后 `created`，secret 表有记录；测试数据已清除。
+
+## 2026-10-05 · GUI 视觉改版（clam 主题 + 统一设计令牌）
+
+- 动机：原界面大量继承 Windows 默认 ttk（vista 基底）观感，与「本地密钥
+  保管箱」的工具定位不符；改版只动 `kv/gui/`（叶子模块），骨架与交互不变。
+- 关键一手：ttk 基底切到 **clam**——vista 主题不吃颜色配置，表格/标签页/
+  按钮全都没法定制；切 clam 后按设计令牌注册全量组件样式。
+- 设计令牌集中在 `theme.py`：深墨蓝侧边栏 `#161a23`、白纸内容区、靛蓝主色
+  `#4a6cf7`、三级文字灰阶、语义色；`setup_style()` 按组件组拆成 6 个子函数
+  （受 `test_arch` 单函数 60 行预算约束）。
+- 组件：按钮三档（Accent 实心主色 / 白底描边 / Danger 红字）、Treeview 行高
+  32 无边框扁平表头、Notebook 扁平标签页选中主色、Entry 聚焦变主色、
+  原生 Text/Listbox 统一 `theme.flat()` 1px 描边。
+- 外壳：侧边栏品牌区（◆ KeyVault + 副标题 + 分隔线）+ 导航主色指示条；
+  六页统一 `PageHeader`（标题 + 副标题）；主操作按钮一律 Accent。
+- 微调：密钥管理页创建时间列精简到分钟（原精确到秒在常见窗口宽度下被截断）。
+- 曾试 DWM 深色标题栏，被 `test_arch` 的 ctypes 隔离测试拦下（GUI 层禁
+  ctypes）——门禁正确，撤回；标题栏保持系统默认。
+- 验证：全量 548 条 `OK (skipped=2)`；六页构建切换无异常；逐页截图目检
+  （DPI aware 截屏，演示数据驱动）。

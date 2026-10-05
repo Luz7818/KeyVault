@@ -166,14 +166,29 @@ class FormDialog(tk.Toplevel):
         return self._result
 
 
+class PageHeader(ttk.Frame):
+    """页头：大标题 + 一行副标题，全应用统一的页面开场。"""
+
+    def __init__(self, parent: tk.Widget, title: str, subtitle: str = "") -> None:
+        super().__init__(parent, style="TFrame")
+        ttk.Label(self, text=title, style="Heading.TLabel").pack(anchor="w")
+        if subtitle:
+            ttk.Label(self, text=subtitle, style="Sub.TLabel").pack(anchor="w", pady=(2, 0))
+
+
 class StatusLabel(ttk.Frame):
-    """底部状态栏。"""
+    """底部状态栏：1px 上描边 + 状态文字。"""
 
     def __init__(self, parent: tk.Widget):
-        super().__init__(parent, height=theme.STATUS_HEIGHT)
+        super().__init__(parent, height=theme.STATUS_HEIGHT, style="TFrame")
         self.pack(fill="x", side="bottom")
-        self._label = ttk.Label(self, text="就绪", font=theme.FONT_SMALL, anchor="w")
-        self._label.pack(fill="x", padx=theme.PAD, pady=2)
+        self.pack_propagate(False)
+        ttk.Separator(self, orient="horizontal").pack(fill="x", side="top")
+        self._label = ttk.Label(
+            self, text="就绪", font=theme.FONT_SMALL, anchor="w",
+            foreground=theme.TEXT_SECONDARY,
+        )
+        self._label.pack(fill="both", expand=True, padx=theme.PAD_SM)
 
     def set(self, text: str, *, color: str = "") -> None:
         self._label.config(text=text, foreground=color or theme.TEXT_SECONDARY)

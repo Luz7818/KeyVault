@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
-from kv.gui.widgets import FormDialog
+from kv.gui.widgets import FormDialog, PageHeader
 
 
 class IngestPage(ttk.Frame):
@@ -17,7 +17,9 @@ class IngestPage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        ttk.Label(self, text="批量操作", font=theme.FONT_HEADING).pack(anchor="w")
+        PageHeader(self, "批量操作", "从 .env / CSV 批量导入，注入或轮换").pack(
+            anchor="w", pady=(0, theme.GAP),
+        )
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._import_tab = ttk.Frame(nb, padding=theme.PAD)
@@ -43,8 +45,12 @@ class IngestPage(ttk.Frame):
         ttk.Entry(opts, textvariable=self._import_tags, width=20).pack(side="left", padx=theme.GAP)
         self._import_force = tk.BooleanVar(value=False)
         ttk.Checkbutton(opts, text="强制（跳过不可信判定）", variable=self._import_force).pack(side="left", padx=theme.PAD)
-        ttk.Button(self._import_tab, text="导入", command=self._do_import).pack(pady=theme.PAD, anchor="w")
-        self._import_result = tk.Text(self._import_tab, height=8, font=theme.FONT_MONO, state="disabled")
+        ttk.Button(self._import_tab, text="导入", style="Accent.TButton", command=self._do_import).pack(pady=theme.PAD, anchor="w")
+        self._import_result = tk.Text(
+            self._import_tab, height=8, font=theme.FONT_MONO, state="disabled",
+            bg=theme.SURFACE, fg=theme.TEXT,
+        )
+        theme.flat(self._import_result)
         self._import_result.pack(fill="both", expand=True)
 
     def _build_inject(self) -> None:
@@ -63,7 +69,7 @@ class IngestPage(ttk.Frame):
         ttk.Checkbutton(form, text="自动加 .gitignore", variable=self._inject_gitignore).grid(
             row=2, column=1, sticky="w", pady=4,
         )
-        ttk.Button(self._inject_tab, text="注入", command=self._do_inject).pack(pady=theme.PAD, anchor="w")
+        ttk.Button(self._inject_tab, text="注入", style="Accent.TButton", command=self._do_inject).pack(pady=theme.PAD, anchor="w")
         self._inject_result = ttk.Label(self._inject_tab, text="", font=theme.FONT_SMALL)
         self._inject_result.pack(anchor="w")
 

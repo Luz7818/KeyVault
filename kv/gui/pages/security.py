@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
-from kv.gui.widgets import DataTable
+from kv.gui.widgets import DataTable, PageHeader
 
 SCAN_COLS = ("path", "line_no", "name", "platform", "status")
 SCAN_HEADS = ("文件", "行号", "密钥", "平台", "状态")
@@ -25,7 +25,9 @@ class SecurityPage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        ttk.Label(self, text="安全", font=theme.FONT_HEADING).pack(anchor="w")
+        PageHeader(self, "安全", "泄露扫描、审计溯源、过期清除").pack(
+            anchor="w", pady=(0, theme.GAP),
+        )
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._scan_tab = ttk.Frame(nb, padding=theme.PAD)
@@ -44,7 +46,7 @@ class SecurityPage(ttk.Frame):
         self._scan_dir = tk.StringVar(value=".")
         ttk.Entry(bar, textvariable=self._scan_dir, width=40).pack(side="left", fill="x", expand=True)
         ttk.Button(bar, text="浏览", command=self._pick_dir).pack(side="left", padx=theme.GAP)
-        ttk.Button(bar, text="扫描", command=self._do_scan).pack(side="left")
+        ttk.Button(bar, text="扫描", style="Accent.TButton", command=self._do_scan).pack(side="left")
         self._scan_table = DataTable(self._scan_tab, SCAN_COLS, headings=SCAN_HEADS, widths=SCAN_WIDTHS)
         self._scan_table.pack(fill="both", expand=True, pady=(theme.GAP, 0))
 
@@ -70,7 +72,7 @@ class SecurityPage(ttk.Frame):
         btn_bar = ttk.Frame(pur)
         btn_bar.pack(fill="x", pady=(theme.GAP, 0))
         ttk.Button(btn_bar, text="预览（dry-run）", command=lambda: self._do_purge(dry=True)).pack(side="left")
-        ttk.Button(btn_bar, text="执行清除", command=lambda: self._do_purge(dry=False)).pack(side="left", padx=theme.GAP)
+        ttk.Button(btn_bar, text="执行清除", style="Danger.TButton", command=lambda: self._do_purge(dry=False)).pack(side="left", padx=theme.GAP)
 
     def _pick_dir(self) -> None:
         d = filedialog.askdirectory(parent=self, title="选择扫描目录")

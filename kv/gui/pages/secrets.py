@@ -7,11 +7,11 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
-from kv.gui.widgets import DataTable, FormDialog
+from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
 COLUMNS = ("name", "platform", "status", "preview", "created_at")
 HEADINGS = ("名称", "平台", "状态", "预览", "创建时间")
-WIDTHS = (160, 120, 70, 200, 150)
+WIDTHS = (130, 100, 70, 180, 140)
 
 
 class SecretsPage(ttk.Frame):
@@ -22,6 +22,8 @@ class SecretsPage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
+        self._header = PageHeader(self, "密钥管理", "存取、轮换、审计——所有数据不出本机")
+        self._header.pack(anchor="w", pady=(0, theme.GAP))
         self._build_toolbar()
         self._table = DataTable(
             self, COLUMNS, headings=HEADINGS, widths=WIDTHS,
@@ -37,7 +39,7 @@ class SecretsPage(ttk.Frame):
         self._search = tk.StringVar()
         self._search.trace_add("write", lambda *_: self.refresh())
         ttk.Entry(bar, textvariable=self._search, width=24).pack(side="left")
-        ttk.Label(bar, text="搜索").pack(side="left", padx=(4, theme.PAD))
+        ttk.Label(bar, text="搜索", style="Sub.TLabel").pack(side="left", padx=(8, theme.PAD))
         self._status_filter = tk.StringVar(value="")
         cb = ttk.Combobox(
             bar, textvariable=self._status_filter, width=8, state="readonly",
@@ -45,8 +47,8 @@ class SecretsPage(ttk.Frame):
         )
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", lambda _: self.refresh())
-        ttk.Label(bar, text="状态").pack(side="left", padx=(4, theme.PAD))
-        ttk.Button(bar, text="添加", command=self._on_add).pack(side="right")
+        ttk.Label(bar, text="状态", style="Sub.TLabel").pack(side="left", padx=(8, theme.PAD))
+        ttk.Button(bar, text="添加", style="Accent.TButton", command=self._on_add).pack(side="right")
         ttk.Button(bar, text="刷新", command=self.refresh).pack(side="right", padx=(0, theme.GAP))
 
     def _build_menu(self) -> None:
@@ -88,9 +90,10 @@ class SecretsPage(ttk.Frame):
             filters["status"] = status
         self._rows = store.list_secrets(**filters)
         for row in self._rows:
+            created = (row.created_at or "")[:16].replace("T", " ")
             self._table.insert_row((
                 row.name, row.platform, row.status,
-                row.preview("*"), row.created_at[:19] if row.created_at else "",
+                row.preview("*"), created,
             ))
         self._app.set_status(f"{len(self._rows)} 条记录")
 
@@ -169,8 +172,12 @@ class SecretsPage(ttk.Frame):
         win.title(f"详情 — {row.name}")
         win.geometry("520x480")
         win.transient(self)
-        txt = tk.Text(win, font=theme.FONT_MONO, wrap="word", padx=12, pady=12)
-        txt.pack(fill="both", expand=True)
+        txt = tk.Text(
+            win, font=theme.FONT_MONO, wrap="word", padx=12, pady=12,
+            bg=theme.SURFACE, fg=theme.TEXT,
+        )
+        theme.flat(txt)
+        txt.pack(fill="both", expand=True, padx=theme.PAD, pady=(theme.PAD, 0))
         _fill_detail(txt, row, fps)
         txt.config(state="disabled")
         ttk.Button(win, text="关闭", command=win.destroy).pack(pady=8)

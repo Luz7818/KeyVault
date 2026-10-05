@@ -1,35 +1,285 @@
-"""GUI 主题常量。颜色、字体、间距集中在这里，页面模块只引用不硬编码。"""
+"""GUI 主题：设计令牌 + ttk 样式注册。
+
+颜色、字体、间距集中在这里，页面模块只引用令牌不硬编码。
+setup_style() 必须在创建任何 widget 之前调用一次——它把 ttk 基底切到 clam
+（Windows 默认的 vista 主题不吃颜色配置，表格/标签页/按钮都无法定制），
+再按下面的令牌注册全部组件样式。
+"""
 
 from __future__ import annotations
 
-BG = "#f5f5f5"
-SIDEBAR_BG = "#2b2b2b"
-SIDEBAR_FG = "#cccccc"
-SIDEBAR_ACTIVE_BG = "#3c3c3c"
-SIDEBAR_ACTIVE_FG = "#ffffff"
-CONTENT_BG = "#ffffff"
-TEXT = "#1a1a1a"
-TEXT_SECONDARY = "#666666"
-ACCENT = "#0078d4"
-ACCENT_HOVER = "#106ebe"
-ERROR = "#d13438"
-WARNING = "#ff8c00"
-SUCCESS = "#107c10"
-BORDER = "#e0e0e0"
-TABLE_HEADER_BG = "#fafafa"
-TABLE_ALT_BG = "#f9f9f9"
-TABLE_SELECT_BG = "#cce4f7"
+import tkinter as tk
+from tkinter import ttk
 
+# ---------------------------------------------------------------- 色板
+# 中性色阶：一张纸的逻辑——内容区是白纸，窗口底是衬灰，文字三级灰。
+BG = "#f4f5f7"            # 窗口衬底（对话框、边缘）
+SURFACE = "#ffffff"       # 内容区纸面
+CONTENT_BG = SURFACE      # 兼容旧引用：内容区背景
+BORDER = "#e4e7ee"        # 1px 描边
+BORDER_STRONG = "#cbd2de"
+TABLE_HEADER_BG = "#f8f9fb"
+TABLE_ALT_BG = "#fafbfd"  # 斑马纹
+TABLE_SELECT_BG = "#eef2ff"
+HOVER_BG = "#f1f3f9"
+
+# 主色与语义色
+ACCENT = "#4a6cf7"
+ACCENT_HOVER = "#3b58e0"
+ACCENT_ACTIVE = "#3249c4"
+ACCENT_SOFT = "#eef2ff"
+ERROR = "#d92d20"
+ERROR_SOFT = "#fee4e2"
+WARNING = "#d97706"
+SUCCESS = "#12805c"
+
+TEXT = "#1f2430"
+TEXT_SECONDARY = "#667085"
+TEXT_TERTIARY = "#98a2b3"
+
+# 侧边栏（深墨蓝）
+SIDEBAR_BG = "#161a23"
+SIDEBAR_FG = "#9aa4b8"
+SIDEBAR_ACTIVE_BG = "#232937"
+SIDEBAR_ACTIVE_FG = "#ffffff"
+SIDEBAR_INDICATOR = ACCENT
+SIDEBAR_MUTED = "#5d6575"
+
+# ---------------------------------------------------------------- 字体
 FONT_FAMILY = "Microsoft YaHei UI"
+MONO_FAMILY = "Consolas"
 FONT = (FONT_FAMILY, 10)
 FONT_BOLD = (FONT_FAMILY, 10, "bold")
-FONT_HEADING = (FONT_FAMILY, 14, "bold")
+FONT_HEADING = (FONT_FAMILY, 16, "bold")
+FONT_SUBTITLE = (FONT_FAMILY, 9)
 FONT_SMALL = (FONT_FAMILY, 9)
-FONT_MONO = ("Consolas", 10)
+FONT_TABLE = (FONT_FAMILY, 10)
+FONT_MONO = (MONO_FAMILY, 10)
 
-PAD = 12
-PAD_SM = 6
-PAD_LG = 20
-GAP = 8
-SIDEBAR_WIDTH = 180
-STATUS_HEIGHT = 28
+# ---------------------------------------------------------------- 尺寸
+PAD = 16
+PAD_SM = 8
+PAD_LG = 24
+GAP = 10
+SIDEBAR_WIDTH = 208
+STATUS_HEIGHT = 30
+ROW_HEIGHT = 32
+
+
+def flat(widget: tk.Widget) -> None:
+    """给原生 tk.Text/Listbox 统一扁平描边：1px 灰框，聚焦变主色。"""
+    widget.configure(
+        relief="flat",
+        highlightthickness=1,
+        highlightbackground=BORDER,
+        highlightcolor=ACCENT,
+        bd=0,
+    )
+
+
+def setup_style() -> None:
+    """切到 clam 基底并按令牌注册全部组件样式。进 GUI 先调这个。"""
+    style = ttk.Style()
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass  # 环境没有 clam 时退回默认，样式尽力而为
+    _base(style)
+    _buttons(style)
+    _inputs(style)
+    _notebook(style)
+    _tree_and_scrollbars(style)
+    _cards_and_choices(style)
+
+
+def _base(style: ttk.Style) -> None:
+    """全局默认与文本层级。"""
+    style.configure(
+        ".",
+        background=SURFACE,
+        foreground=TEXT,
+        font=FONT,
+        bordercolor=BORDER,
+        focuscolor=ACCENT,
+    )
+    # 框架：内容区是一张白纸
+    style.configure("TFrame", background=SURFACE)
+    style.configure("Muted.TFrame", background=BG)
+    # 文本层级
+    style.configure("TLabel", background=SURFACE, foreground=TEXT)
+    style.configure("Heading.TLabel", font=FONT_HEADING, foreground=TEXT)
+    style.configure("Sub.TLabel", font=FONT_SUBTITLE, foreground=TEXT_SECONDARY)
+    style.configure("Muted.TLabel", foreground=TEXT_TERTIARY)
+    style.configure("Muted.TFrame TLabel", background=BG)
+    style.configure("Accent.TLabel", foreground=ACCENT)
+
+
+def _buttons(style: ttk.Style) -> None:
+    """按钮三档：普通=白底描边，Accent=实心主色，Danger=红字。"""
+    style.configure(
+        "TButton",
+        background=SURFACE,
+        foreground=TEXT,
+        bordercolor=BORDER_STRONG,
+        lightcolor=SURFACE,
+        darkcolor=SURFACE,
+        relief="flat",
+        focusthickness=1,
+        focuscolor=ACCENT,
+        padding=(14, 6),
+        font=FONT,
+    )
+    style.map(
+        "TButton",
+        background=[("pressed", HOVER_BG), ("active", HOVER_BG)],
+        bordercolor=[("focus", ACCENT)],
+    )
+    style.configure(
+        "Accent.TButton",
+        background=ACCENT,
+        foreground="#ffffff",
+        bordercolor=ACCENT,
+        lightcolor=ACCENT,
+        darkcolor=ACCENT,
+    )
+    style.map(
+        "Accent.TButton",
+        background=[("pressed", ACCENT_ACTIVE), ("active", ACCENT_HOVER)],
+        bordercolor=[("focus", ACCENT_ACTIVE)],
+    )
+    style.configure("Danger.TButton", foreground=ERROR, bordercolor=BORDER_STRONG)
+    style.map(
+        "Danger.TButton",
+        background=[("pressed", ERROR_SOFT), ("active", ERROR_SOFT)],
+        foreground=[("active", ERROR)],
+    )
+
+
+def _inputs(style: ttk.Style) -> None:
+    """输入类：1px 灰框，聚焦变主色。"""
+    style.configure(
+        "TEntry",
+        fieldbackground=SURFACE,
+        foreground=TEXT,
+        bordercolor=BORDER,
+        lightcolor=BORDER,
+        darkcolor=BORDER,
+        insertcolor=TEXT,
+        padding=(8, 5),
+    )
+    style.map("TEntry", bordercolor=[("focus", ACCENT)], lightcolor=[("focus", ACCENT)])
+    style.configure(
+        "TCombobox",
+        fieldbackground=SURFACE,
+        background=HOVER_BG,
+        foreground=TEXT,
+        bordercolor=BORDER,
+        lightcolor=BORDER,
+        darkcolor=BORDER,
+        arrowcolor=TEXT_SECONDARY,
+        padding=(6, 4),
+    )
+    style.map(
+        "TCombobox",
+        bordercolor=[("focus", ACCENT)],
+        fieldbackground=[("readonly", SURFACE)],
+        arrowcolor=[("active", TEXT)],
+    )
+
+
+def _notebook(style: ttk.Style) -> None:
+    """标签页：扁平，选中的那张"纸"白底主色。"""
+    style.configure(
+        "TNotebook",
+        background=SURFACE,
+        bordercolor=SURFACE,
+        lightcolor=SURFACE,
+        tabmargins=(0, 4, 0, 0),
+    )
+    style.configure(
+        "TNotebook.Tab",
+        background=SURFACE,
+        foreground=TEXT_SECONDARY,
+        padding=(16, 8),
+        font=FONT,
+        bordercolor=SURFACE,
+        lightcolor=SURFACE,
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", SURFACE)],
+        foreground=[("selected", ACCENT), ("active", TEXT)],
+    )
+
+
+def _tree_and_scrollbars(style: ttk.Style) -> None:
+    """表格与滚动条：行高、去边框、扁平表头、主色浅底选中。"""
+    style.configure(
+        "Treeview",
+        background=SURFACE,
+        fieldbackground=SURFACE,
+        foreground=TEXT,
+        rowheight=ROW_HEIGHT,
+        bordercolor=BORDER,
+        borderwidth=1,
+        relief="flat",
+        font=FONT_TABLE,
+    )
+    style.map(
+        "Treeview",
+        background=[("selected", TABLE_SELECT_BG)],
+        foreground=[("selected", TEXT)],
+    )
+    style.configure(
+        "Treeview.Heading",
+        background=TABLE_HEADER_BG,
+        foreground=TEXT_SECONDARY,
+        font=FONT_SUBTITLE,
+        relief="flat",
+        bordercolor=SURFACE,
+        padding=(8, 7),
+    )
+    style.map("Treeview.Heading", background=[("active", TABLE_HEADER_BG)])
+    for orient in ("Vertical", "Horizontal"):
+        style.configure(
+            f"{orient}.TScrollbar",
+            background="#e9ecf2",
+            troughcolor=SURFACE,
+            bordercolor=SURFACE,
+            arrowcolor=TEXT_TERTIARY,
+            relief="flat",
+        )
+        style.map(
+            f"{orient}.TScrollbar",
+            background=[("active", "#d9dee8"), ("pressed", "#c9d0dd")],
+        )
+    style.configure("TSeparator", background=BORDER)
+
+
+def _cards_and_choices(style: ttk.Style) -> None:
+    """LabelFrame 卡片与单选/复选。"""
+    style.configure(
+        "TLabelframe",
+        background=SURFACE,
+        bordercolor=BORDER,
+        relief="flat",
+        borderwidth=1,
+    )
+    style.configure(
+        "TLabelframe.Label",
+        background=SURFACE,
+        foreground=TEXT_SECONDARY,
+        font=FONT_SUBTITLE,
+    )
+    style.configure("TRadiobutton", background=SURFACE, focuscolor=ACCENT)
+    style.map(
+        "TRadiobutton",
+        background=[("active", SURFACE)],
+        indicatorcolor=[("selected", ACCENT)],
+    )
+    style.configure("TCheckbutton", background=SURFACE, focuscolor=ACCENT)
+    style.map(
+        "TCheckbutton",
+        background=[("active", SURFACE)],
+        indicatorcolor=[("selected", ACCENT)],
+    )

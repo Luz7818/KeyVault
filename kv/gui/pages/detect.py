@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
-from kv.gui.widgets import DataTable
+from kv.gui.widgets import DataTable, PageHeader
 
 DET_COLS = ("platform", "confidence", "preview", "evidence")
 DET_HEADS = ("平台", "置信度", "预览", "依据")
@@ -21,14 +21,20 @@ class DetectPage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        ttk.Label(self, text="检测", font=theme.FONT_HEADING).pack(anchor="w")
+        PageHeader(self, "检测", "粘贴文本或选文件，找出其中的密钥形态").pack(
+            anchor="w", pady=(0, theme.GAP),
+        )
         input_frame = ttk.LabelFrame(self, text="输入文本", padding=theme.PAD_SM)
         input_frame.pack(fill="x", pady=(theme.GAP, 0))
-        self._text = tk.Text(input_frame, height=6, font=theme.FONT_MONO, wrap="word")
+        self._text = tk.Text(
+            input_frame, height=6, font=theme.FONT_MONO, wrap="word",
+            bg=theme.SURFACE, fg=theme.TEXT,
+        )
+        theme.flat(self._text)
         self._text.pack(fill="x")
         bar = ttk.Frame(input_frame)
         bar.pack(fill="x", pady=(theme.GAP, 0))
-        ttk.Button(bar, text="检测文本", command=self._detect_text).pack(side="left")
+        ttk.Button(bar, text="检测文本", style="Accent.TButton", command=self._detect_text).pack(side="left")
         ttk.Button(bar, text="检测文件", command=self._detect_file).pack(side="left", padx=theme.GAP)
         ttk.Button(bar, text="清空", command=lambda: self._text.delete("1.0", "end")).pack(side="left")
         self._table = DataTable(self, DET_COLS, headings=DET_HEADS, widths=DET_WIDTHS)

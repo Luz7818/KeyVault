@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 
 from kv import __version__
 from kv.gui import theme
+from kv.gui.widgets import PageHeader
 
 
 class SettingsPage(ttk.Frame):
@@ -17,16 +18,21 @@ class SettingsPage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        ttk.Label(self, text="设置", font=theme.FONT_HEADING).pack(anchor="w")
+        PageHeader(self, "设置", "初始化 vault、健康检查与配置项").pack(
+            anchor="w", pady=(0, theme.GAP),
+        )
         self._info = tk.Text(
             self, height=16, font=theme.FONT_MONO, state="disabled",
-            bg=theme.TABLE_HEADER_BG, relief="solid", borderwidth=1,
-            wrap="word", padx=theme.PAD, pady=theme.PAD,
+            bg=theme.TABLE_HEADER_BG, wrap="word", padx=theme.PAD, pady=theme.PAD,
+            fg=theme.TEXT,
         )
+        theme.flat(self._info)
         self._info.pack(fill="both", expand=True, pady=(theme.PAD, 0))
         bar = ttk.Frame(self)
         bar.pack(fill="x", pady=(theme.PAD, 0))
-        ttk.Button(bar, text="初始化 Vault", command=self._do_init).pack(side="left", padx=(0, theme.GAP))
+        ttk.Button(
+            bar, text="初始化 Vault", style="Accent.TButton", command=self._do_init,
+        ).pack(side="left", padx=(0, theme.GAP))
         ttk.Button(bar, text="健康检查", command=self._do_doctor).pack(side="left", padx=(0, theme.GAP))
         ttk.Button(bar, text="刷新", command=self._refresh).pack(side="left", padx=(0, theme.GAP))
         ttk.Button(bar, text="关于", command=self._show_about).pack(side="left")
