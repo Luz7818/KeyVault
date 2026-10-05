@@ -1,4 +1,4 @@
-"""可复用 GUI 组件。表格、表单对话框、确认框、状态栏。"""
+"""可复用 GUI 组件。表格、表单对话框、确认框、状态栏、页头。"""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 from typing import Any, Callable, Sequence
 
 from kv.gui import theme
+from kv.gui.controls import RoundButton
 
 
 class DataTable(ttk.Frame):
@@ -141,8 +142,8 @@ class FormDialog(tk.Toplevel):
     def _build_buttons(self, parent: tk.Widget) -> None:
         bar = ttk.Frame(parent)
         bar.grid(row=len(self._vars), column=0, columnspan=2, pady=(theme.PAD, 0))
-        ttk.Button(bar, text="确定", command=self._on_ok).pack(side="left", padx=theme.GAP)
-        ttk.Button(bar, text="取消", command=self._on_cancel).pack(side="left")
+        RoundButton(bar, "确定", self._on_ok, kind="accent").pack(side="left", padx=theme.GAP)
+        RoundButton(bar, "取消", self._on_cancel).pack(side="left")
 
     def _on_ok(self) -> None:
         self._result = {k: v.get() for k, v in self._vars.items()}

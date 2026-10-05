@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
+from kv.gui.controls import Card, RoundButton
 from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
 COLUMNS = ("name", "platform", "status", "preview", "created_at")
@@ -25,12 +26,14 @@ class SecretsPage(ttk.Frame):
         self._header = PageHeader(self, "密钥管理", "存取、轮换、审计——所有数据不出本机")
         self._header.pack(anchor="w", pady=(0, theme.GAP))
         self._build_toolbar()
+        card = Card(self)
+        card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._table = DataTable(
-            self, COLUMNS, headings=HEADINGS, widths=WIDTHS,
+            card.body, COLUMNS, headings=HEADINGS, widths=WIDTHS,
             on_double=lambda r: self._on_show(r["name"]),
             on_right_click=self._on_right_click,
         )
-        self._table.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        self._table.pack(fill="both", expand=True, padx=1, pady=1)
         self._build_menu()
 
     def _build_toolbar(self) -> None:
@@ -48,8 +51,8 @@ class SecretsPage(ttk.Frame):
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", lambda _: self.refresh())
         ttk.Label(bar, text="状态", style="Sub.TLabel").pack(side="left", padx=(8, theme.PAD))
-        ttk.Button(bar, text="添加", style="Accent.TButton", command=self._on_add).pack(side="right")
-        ttk.Button(bar, text="刷新", command=self.refresh).pack(side="right", padx=(0, theme.GAP))
+        RoundButton(bar, "添加", self._on_add, kind="accent").pack(side="right")
+        RoundButton(bar, "刷新", self.refresh).pack(side="right", padx=(0, theme.GAP))
 
     def _build_menu(self) -> None:
         self._menu = tk.Menu(self, tearoff=0)

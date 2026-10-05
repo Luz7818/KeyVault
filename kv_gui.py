@@ -1,4 +1,9 @@
-"""kv GUI 入口 shim。修正 sys.path 和 UTF-8 后启动 tkinter 主窗口。"""
+"""kv GUI 入口 shim。修 sys.path、DPI 感知、UTF-8 后启动 tkinter 主窗口。
+
+DPI 感知必须放在这里而不是 kv/gui/：进程不感知 DPI 时系统会把整个窗口
+位图拉伸，文字发虚——这是「界面不清晰」的根因。ctypes 出错的失败模式是
+进程级崩溃，按 test_arch 的隔离规则 FFI 只允许在入口与 crypto/capture。
+"""
 
 from __future__ import annotations
 
@@ -16,6 +21,30 @@ for stream in (sys.stdout, sys.stderr):
             reconfigure(encoding="utf-8", errors="replace")
         except (ValueError, OSError):
             pass
+
+
+def _dpi_scale() -> float:
+    """进程级 DPI 感知，返回缩放系数。必须在创建任何 Tk 窗口之前调用。"""
+    try:
+        import ctypes
+
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)  # per-monitor
+        except (OSError, AttributeError):
+            ctypes.windll.user32.SetProcessDPIAware()
+        hdc = ctypes.windll.user32.GetDC(0)
+        try:
+            dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX
+        finally:
+            ctypes.windll.user32.ReleaseDC(0, hdc)
+        return max(dpi / 96.0, 1.0)
+    except Exception:
+        return 1.0
+
+
+from kv.gui import theme  # noqa: E402  —— 必须在 sys.path 修好之后导入
+
+theme.init(_dpi_scale())
 
 from kv.gui import launch  # noqa: E402
 

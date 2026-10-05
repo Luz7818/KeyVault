@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 
 from kv import __version__
 from kv.gui import theme
+from kv.gui.controls import Card, RoundButton
 from kv.gui.widgets import PageHeader
 
 
@@ -21,21 +22,20 @@ class SettingsPage(ttk.Frame):
         PageHeader(self, "设置", "初始化 vault、健康检查与配置项").pack(
             anchor="w", pady=(0, theme.GAP),
         )
+        info_card = Card(self)
+        info_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._info = tk.Text(
-            self, height=16, font=theme.FONT_MONO, state="disabled",
-            bg=theme.TABLE_HEADER_BG, wrap="word", padx=theme.PAD, pady=theme.PAD,
-            fg=theme.TEXT,
+            info_card.body, height=16, font=theme.FONT_MONO, state="disabled",
+            bg=theme.SURFACE, wrap="word", padx=theme.PAD, pady=theme.PAD,
+            fg=theme.TEXT, relief="flat", bd=0, highlightthickness=0,
         )
-        theme.flat(self._info)
-        self._info.pack(fill="both", expand=True, pady=(theme.PAD, 0))
+        self._info.pack(fill="both", expand=True, padx=1, pady=1)
         bar = ttk.Frame(self)
         bar.pack(fill="x", pady=(theme.PAD, 0))
-        ttk.Button(
-            bar, text="初始化 Vault", style="Accent.TButton", command=self._do_init,
-        ).pack(side="left", padx=(0, theme.GAP))
-        ttk.Button(bar, text="健康检查", command=self._do_doctor).pack(side="left", padx=(0, theme.GAP))
-        ttk.Button(bar, text="刷新", command=self._refresh).pack(side="left", padx=(0, theme.GAP))
-        ttk.Button(bar, text="关于", command=self._show_about).pack(side="left")
+        RoundButton(bar, "初始化 Vault", self._do_init, kind="accent").pack(side="left", padx=(0, theme.GAP))
+        RoundButton(bar, "健康检查", self._do_doctor).pack(side="left", padx=(0, theme.GAP))
+        RoundButton(bar, "刷新", self._refresh).pack(side="left", padx=(0, theme.GAP))
+        RoundButton(bar, "关于", self._show_about).pack(side="left")
         self._settings_frame = ttk.LabelFrame(self, text="配置项", padding=theme.PAD)
         self._settings_frame.pack(fill="x", pady=(theme.PAD, 0))
         self._setting_vars: dict[str, tk.StringVar] = {}

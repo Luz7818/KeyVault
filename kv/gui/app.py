@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any, Callable
 
-from kv.gui import theme
+from kv.gui import motion, theme
 from kv.gui.widgets import StatusLabel
 
 NAV_ITEMS: list[tuple[str, str]] = [
@@ -24,17 +24,18 @@ NAV_ITEMS: list[tuple[str, str]] = [
 class App(tk.Tk):
     """kv GUI 主窗口。"""
 
-    def __init__(self) -> None:
+    def __init__(self, *, scale: float = 1.0) -> None:
         super().__init__()
+        theme.init(scale)
         theme.setup_style()
         self.title("KeyVault")
-        self.geometry("1080x720")
-        self.minsize(920, 600)
+        self.geometry(f"{round(1080 * scale)}x{round(720 * scale)}")
+        self.minsize(round(920 * scale), round(600 * scale))
         self.configure(bg=theme.BG)
         self._queue: queue.Queue[tuple[Callable, tuple, dict]] = queue.Queue()
         self._pages: dict[str, tk.Widget] = {}
         self._nav_buttons: dict[str, tk.Button] = {}
-        self._nav_indicators: dict[str, tk.Frame] = {}
+        self._page_slides: dict[str, motion.Spring] = {}
         self._current: str = ""
         self._build_layout()
         self._register_pages()
@@ -42,6 +43,8 @@ class App(tk.Tk):
         self.after(50, self._drain_queue)
 
     def _build_layout(self) -> None:
+        # 状态栏必须先 pack——后 pack 的 expand 内容区会把它挤出窗口
+        self._status = StatusLabel(self)
         self._sidebar = tk.Frame(self, bg=theme.SIDEBAR_BG, width=theme.SIDEBAR_WIDTH)
         self._sidebar.pack(side="left", fill="y")
         self._sidebar.pack_propagate(False)
@@ -57,13 +60,11 @@ class App(tk.Tk):
             bg=theme.SIDEBAR_BG, fg=theme.SIDEBAR_MUTED, anchor="w",
         ).pack(anchor="w", pady=(2, 0))
 
-        tk.Frame(self._sidebar, bg="#232937", height=1).pack(fill="x", padx=theme.PAD)
+        tk.Frame(self._sidebar, bg="#232a38", height=1).pack(fill="x", padx=theme.PAD)
 
         nav = tk.Frame(self._sidebar, bg=theme.SIDEBAR_BG)
         nav.pack(fill="x", pady=(theme.PAD_SM, 0))
-        for row, (key, label) in enumerate(NAV_ITEMS):
-            indicator = tk.Frame(nav, bg=theme.SIDEBAR_BG, width=3)
-            indicator.grid(row=row, column=0, sticky="nsw", pady=3)
+        for key, label in NAV_ITEMS:
             btn = tk.Button(
                 nav, text=label, anchor="w",
                 font=theme.FONT, bg=theme.SIDEBAR_BG, fg=theme.SIDEBAR_FG,
@@ -72,14 +73,37 @@ class App(tk.Tk):
                 relief="flat", bd=0, padx=theme.PAD, pady=theme.PAD_SM,
                 cursor="hand2", command=lambda k=key: self.show_page(k),
             )
-            btn.grid(row=row, column=1, sticky="ew", pady=3)
-            nav.grid_columnconfigure(1, weight=1)
+            btn.pack(fill="x")
+            btn.bind("<Enter>", lambda e, b=btn: self._nav_tint(b, theme.SIDEBAR_HOVER_FG))
+            btn.bind("<Leave>", lambda e, b=btn: self._nav_tint(b, self._nav_rest_color(b)))
             self._nav_buttons[key] = btn
-            self._nav_indicators[key] = indicator
 
+        # 指示条：单实例，切换时弹簧滑到目标项旁边——比逐项变色更有"实体感"
+        self._indicator = tk.Frame(nav, bg=theme.SIDEBAR_INDICATOR, width=3, height=1)
+        self._indicator_y = motion.Spring(self, lambda y: self._place_indicator(y))
         self._content = tk.Frame(self, bg=theme.SURFACE)
         self._content.pack(side="left", fill="both", expand=True)
-        self._status = StatusLabel(self)
+
+    def _nav_rest_color(self, btn: tk.Button) -> str:
+        active = btn is self._nav_buttons.get(self._current)
+        return theme.SIDEBAR_ACTIVE_FG if active else theme.SIDEBAR_FG
+
+    def _nav_tint(self, btn: tk.Button, target: str) -> None:
+        source = btn.cget("fg")
+        gen = getattr(btn, "_tint_gen", 0) + 1
+        btn._tint_gen = gen
+
+        def tick(step: int = 0) -> None:
+            if btn._tint_gen != gen:
+                return
+            btn.config(fg=motion.lerp_color(source, target, min(step / 6, 1.0)))
+            if step < 6:
+                btn.after(16, tick, step + 1)
+
+        tick()
+
+    def _place_indicator(self, y: float) -> None:
+        self._indicator.place_configure(y=round(y))
 
     def _register_pages(self) -> None:
         from kv.gui.pages.capture import CapturePage
@@ -105,21 +129,43 @@ class App(tk.Tk):
     def show_page(self, key: str) -> None:
         if key == self._current:
             return
+        self._current = key
         for k, btn in self._nav_buttons.items():
             active = k == key
             btn.config(
                 bg=theme.SIDEBAR_ACTIVE_BG if active else theme.SIDEBAR_BG,
                 fg=theme.SIDEBAR_ACTIVE_FG if active else theme.SIDEBAR_FG,
             )
-            self._nav_indicators[k].config(
-                bg=theme.SIDEBAR_INDICATOR if active else theme.SIDEBAR_BG,
-            )
+        self._move_indicator(self._nav_buttons[key])
         for k, page in self._pages.items():
             if k == key:
                 page.tkraise()
                 if hasattr(page, "on_show"):
                     page.on_show()
-        self._current = key
+                self._slide_in(page, k)
+
+    def _move_indicator(self, btn: tk.Button) -> None:
+        """指示条滑到目标项；布局没完成（首帧）就等一帧再snap过去。"""
+        self._indicator.config(height=btn.winfo_height() - 2 * theme.PAD_SM)
+        y = btn.winfo_y() + theme.PAD_SM
+        if y <= theme.PAD_SM:
+            self.after(30, lambda: self._indicator_y.jump(
+                btn.winfo_y() + theme.PAD_SM,
+            ))
+        else:
+            self._indicator_y.to(y)
+
+    def _slide_in(self, page: tk.Widget, key: str) -> None:
+        """新页面从右侧 18px 轻滑入（临界阻尼弹簧）。首次切换无动画。"""
+        spring = self._page_slides.get(key)
+        if spring is None:
+            spring = motion.Spring(self, lambda x: page.place_configure(x=round(x)))
+            self._page_slides[key] = spring
+            spring.jump(0)
+            return
+        page.place_configure(x=18)
+        spring.jump(18)
+        spring.to(0)
 
     def set_status(self, text: str, *, color: str = "") -> None:
         self._status.set(text, color=color)

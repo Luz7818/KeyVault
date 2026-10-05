@@ -1,9 +1,11 @@
-"""GUI 主题：设计令牌 + ttk 样式注册。
+"""GUI 主题：设计令牌 + DPI 缩放 + ttk 样式注册。
 
 颜色、字体、间距集中在这里，页面模块只引用令牌不硬编码。
-setup_style() 必须在创建任何 widget 之前调用一次——它把 ttk 基底切到 clam
-（Windows 默认的 vista 主题不吃颜色配置，表格/标签页/按钮都无法定制），
-再按下面的令牌注册全部组件样式。
+init(scale) 在创建任何窗口前调用（kv_gui.py 入口按显示器 DPI 算好 scale），
+把字体换成像素字号、几何常量按比例放大——不感知 DPI 的位图拉伸是文字
+发虚的根因，感知之后全部尺寸必须自己缩放。
+setup_style() 把 ttk 基底切到 clam（Windows 默认 vista 不吃颜色配置），
+再按令牌注册全部组件样式。
 """
 
 from __future__ import annotations
@@ -12,7 +14,6 @@ import tkinter as tk
 from tkinter import ttk
 
 # ---------------------------------------------------------------- 色板
-# 中性色阶：一张纸的逻辑——内容区是白纸，窗口底是衬灰，文字三级灰。
 BG = "#f4f5f7"            # 窗口衬底（对话框、边缘）
 SURFACE = "#ffffff"       # 内容区纸面
 CONTENT_BG = SURFACE      # 兼容旧引用：内容区背景
@@ -22,11 +23,12 @@ TABLE_HEADER_BG = "#f8f9fb"
 TABLE_ALT_BG = "#fafbfd"  # 斑马纹
 TABLE_SELECT_BG = "#eef2ff"
 HOVER_BG = "#f1f3f9"
+PRESS_BG = "#e6eaf4"
 
 # 主色与语义色
-ACCENT = "#4a6cf7"
-ACCENT_HOVER = "#3b58e0"
-ACCENT_ACTIVE = "#3249c4"
+ACCENT = "#3d5fe8"
+ACCENT_HOVER = "#2f4fd6"
+ACCENT_ACTIVE = "#2743b8"
 ACCENT_SOFT = "#eef2ff"
 ERROR = "#d92d20"
 ERROR_SOFT = "#fee4e2"
@@ -38,16 +40,17 @@ TEXT_SECONDARY = "#667085"
 TEXT_TERTIARY = "#98a2b3"
 
 # 侧边栏（深墨蓝）
-SIDEBAR_BG = "#161a23"
+SIDEBAR_BG = "#141821"
 SIDEBAR_FG = "#9aa4b8"
-SIDEBAR_ACTIVE_BG = "#232937"
+SIDEBAR_HOVER_FG = "#c9d2e3"
+SIDEBAR_ACTIVE_BG = "#222a3a"
 SIDEBAR_ACTIVE_FG = "#ffffff"
 SIDEBAR_INDICATOR = ACCENT
 SIDEBAR_MUTED = "#5d6575"
 
 # ---------------------------------------------------------------- 字体
 FONT_FAMILY = "Microsoft YaHei UI"
-MONO_FAMILY = "Consolas"
+MONO_FAMILY = "Cascadia Mono"   # 不可用时 init() 会退回 Consolas
 FONT = (FONT_FAMILY, 10)
 FONT_BOLD = (FONT_FAMILY, 10, "bold")
 FONT_HEADING = (FONT_FAMILY, 16, "bold")
@@ -57,6 +60,7 @@ FONT_TABLE = (FONT_FAMILY, 10)
 FONT_MONO = (MONO_FAMILY, 10)
 
 # ---------------------------------------------------------------- 尺寸
+SCALE = 1.0
 PAD = 16
 PAD_SM = 8
 PAD_LG = 24
@@ -64,6 +68,57 @@ GAP = 10
 SIDEBAR_WIDTH = 208
 STATUS_HEIGHT = 30
 ROW_HEIGHT = 32
+CONTROL_HEIGHT = 36
+RADIUS = 10
+
+# 像素字号基线（scale=1 时），init() 按显示器放大
+_BODY_PX = 13
+_SMALL_PX = 12
+_HEADING_PX = 21
+_MONO_PX = 13
+
+
+def init(scale: float) -> None:
+    """按 DPI 缩放系数重建字体与几何令牌。创建窗口前调用一次。"""
+    global SCALE, PAD, PAD_SM, PAD_LG, GAP, SIDEBAR_WIDTH, STATUS_HEIGHT
+    global ROW_HEIGHT, CONTROL_HEIGHT, RADIUS
+    global FONT, FONT_BOLD, FONT_HEADING, FONT_SUBTITLE, FONT_SMALL
+    global FONT_TABLE, FONT_MONO, MONO_FAMILY
+
+    SCALE = scale
+    PAD = _s(16)
+    PAD_SM = _s(8)
+    PAD_LG = _s(24)
+    GAP = _s(10)
+    SIDEBAR_WIDTH = _s(208)
+    STATUS_HEIGHT = _s(30)
+    ROW_HEIGHT = _s(32)
+    CONTROL_HEIGHT = _s(34)
+    RADIUS = _s(9)
+
+    FONT = (FONT_FAMILY, -_s(_BODY_PX))
+    FONT_BOLD = (FONT_FAMILY, -_s(_BODY_PX), "bold")
+    FONT_HEADING = (FONT_FAMILY, -_s(_HEADING_PX), "bold")
+    FONT_SUBTITLE = (FONT_FAMILY, -_s(_SMALL_PX))
+    FONT_SMALL = (FONT_FAMILY, -_s(_SMALL_PX))
+    FONT_TABLE = (FONT_FAMILY, -_s(_BODY_PX))
+    FONT_MONO = (MONO_FAMILY, -_s(_MONO_PX))
+
+
+def _s(px: int) -> int:
+    return max(round(px * SCALE), 1)
+
+
+def _resolve_mono_family() -> None:
+    """Cascadia Mono 存在就用它（更现代的等宽），否则退回 Consolas。"""
+    global MONO_FAMILY
+    import tkinter.font as tkfont
+
+    families = set(tkfont.families())
+    for candidate in ("Cascadia Mono", "Cascadia Code"):
+        if candidate in families:
+            MONO_FAMILY = candidate
+            return
 
 
 def flat(widget: tk.Widget) -> None:
@@ -79,6 +134,9 @@ def flat(widget: tk.Widget) -> None:
 
 def setup_style() -> None:
     """切到 clam 基底并按令牌注册全部组件样式。进 GUI 先调这个。"""
+    global FONT_MONO
+    _resolve_mono_family()
+    FONT_MONO = (MONO_FAMILY, -_s(_MONO_PX))
     style = ttk.Style()
     try:
         style.theme_use("clam")
@@ -115,7 +173,7 @@ def _base(style: ttk.Style) -> None:
 
 
 def _buttons(style: ttk.Style) -> None:
-    """按钮三档：普通=白底描边，Accent=实心主色，Danger=红字。"""
+    """ttk 按钮兜底样式；页面主路径已换自绘 RoundButton。"""
     style.configure(
         "TButton",
         background=SURFACE,
@@ -129,30 +187,9 @@ def _buttons(style: ttk.Style) -> None:
         padding=(14, 6),
         font=FONT,
     )
-    style.map(
-        "TButton",
-        background=[("pressed", HOVER_BG), ("active", HOVER_BG)],
-        bordercolor=[("focus", ACCENT)],
-    )
-    style.configure(
-        "Accent.TButton",
-        background=ACCENT,
-        foreground="#ffffff",
-        bordercolor=ACCENT,
-        lightcolor=ACCENT,
-        darkcolor=ACCENT,
-    )
-    style.map(
-        "Accent.TButton",
-        background=[("pressed", ACCENT_ACTIVE), ("active", ACCENT_HOVER)],
-        bordercolor=[("focus", ACCENT_ACTIVE)],
-    )
-    style.configure("Danger.TButton", foreground=ERROR, bordercolor=BORDER_STRONG)
-    style.map(
-        "Danger.TButton",
-        background=[("pressed", ERROR_SOFT), ("active", ERROR_SOFT)],
-        foreground=[("active", ERROR)],
-    )
+    style.map("TButton", background=[("active", HOVER_BG)])
+    style.configure("Danger.TButton", foreground=ERROR)
+    style.map("Danger.TButton", foreground=[("active", ERROR)])
 
 
 def _inputs(style: ttk.Style) -> None:
@@ -166,6 +203,7 @@ def _inputs(style: ttk.Style) -> None:
         darkcolor=BORDER,
         insertcolor=TEXT,
         padding=(8, 5),
+        font=FONT,
     )
     style.map("TEntry", bordercolor=[("focus", ACCENT)], lightcolor=[("focus", ACCENT)])
     style.configure(
@@ -178,6 +216,7 @@ def _inputs(style: ttk.Style) -> None:
         darkcolor=BORDER,
         arrowcolor=TEXT_SECONDARY,
         padding=(6, 4),
+        font=FONT,
     )
     style.map(
         "TCombobox",
@@ -188,7 +227,7 @@ def _inputs(style: ttk.Style) -> None:
 
 
 def _notebook(style: ttk.Style) -> None:
-    """标签页：扁平，选中的那张"纸"白底主色。"""
+    """标签页：扁平，选中的那张"纸"主色文字。"""
     style.configure(
         "TNotebook",
         background=SURFACE,
@@ -271,13 +310,13 @@ def _cards_and_choices(style: ttk.Style) -> None:
         foreground=TEXT_SECONDARY,
         font=FONT_SUBTITLE,
     )
-    style.configure("TRadiobutton", background=SURFACE, focuscolor=ACCENT)
+    style.configure("TRadiobutton", background=SURFACE, focuscolor=ACCENT, font=FONT)
     style.map(
         "TRadiobutton",
         background=[("active", SURFACE)],
         indicatorcolor=[("selected", ACCENT)],
     )
-    style.configure("TCheckbutton", background=SURFACE, focuscolor=ACCENT)
+    style.configure("TCheckbutton", background=SURFACE, focuscolor=ACCENT, font=FONT)
     style.map(
         "TCheckbutton",
         background=[("active", SURFACE)],

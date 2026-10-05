@@ -7,11 +7,20 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
+from kv.gui.controls import Card, RoundButton
 from kv.gui.widgets import DataTable, PageHeader
 
 DET_COLS = ("platform", "confidence", "preview", "evidence")
 DET_HEADS = ("平台", "置信度", "预览", "依据")
 DET_WIDTHS = (120, 80, 200, 240)
+
+
+def _lines_height(lines: int) -> int:
+    """Text 指定行数的像素高（Card 需要显式高度）。"""
+    from tkinter import font as tkfont
+
+    line = tkfont.Font(font=theme.FONT_MONO).metrics("linespace")
+    return line * lines + 2
 
 
 class DetectPage(ttk.Frame):
@@ -24,28 +33,39 @@ class DetectPage(ttk.Frame):
         PageHeader(self, "检测", "粘贴文本或选文件，找出其中的密钥形态").pack(
             anchor="w", pady=(0, theme.GAP),
         )
-        input_frame = ttk.LabelFrame(self, text="输入文本", padding=theme.PAD_SM)
-        input_frame.pack(fill="x", pady=(theme.GAP, 0))
-        self._text = tk.Text(
-            input_frame, height=6, font=theme.FONT_MONO, wrap="word",
-            bg=theme.SURFACE, fg=theme.TEXT,
-        )
-        theme.flat(self._text)
-        self._text.pack(fill="x")
-        bar = ttk.Frame(input_frame)
-        bar.pack(fill="x", pady=(theme.GAP, 0))
-        ttk.Button(bar, text="检测文本", style="Accent.TButton", command=self._detect_text).pack(side="left")
-        ttk.Button(bar, text="检测文件", command=self._detect_file).pack(side="left", padx=theme.GAP)
-        ttk.Button(bar, text="清空", command=lambda: self._text.delete("1.0", "end")).pack(side="left")
-        self._table = DataTable(self, DET_COLS, headings=DET_HEADS, widths=DET_WIDTHS)
-        self._table.pack(fill="both", expand=True, pady=(theme.GAP, 0))
-        st_frame = ttk.LabelFrame(self, text="规则自测", padding=theme.PAD_SM)
-        st_frame.pack(fill="x", pady=(theme.GAP, 0))
-        st_bar = ttk.Frame(st_frame)
-        st_bar.pack(fill="x")
-        ttk.Button(st_bar, text="运行 selftest --golden", command=self._run_selftest).pack(side="left")
+        # 底部区先占位：中部结果表格 expand 后不会把它挤出窗口
+        st_card = Card(self, height=theme.CONTROL_HEIGHT + theme.PAD_SM)
+        st_card.pack(side="bottom", fill="x", pady=(theme.PAD_SM, 0))
+        st_bar = ttk.Frame(st_card.body)
+        st_bar.pack(fill="both", expand=True, padx=1, pady=1)
+        RoundButton(st_bar, "运行 selftest --golden", self._run_selftest).pack(side="left")
         self._gate_label = ttk.Label(st_bar, text="", font=theme.FONT_SMALL)
         self._gate_label.pack(side="left", padx=theme.PAD)
+        ttk.Label(self, text="规则自测", style="Sub.TLabel").pack(side="bottom", anchor="w")
+
+        ttk.Label(self, text="输入文本", style="Sub.TLabel").pack(anchor="w")
+        input_card = Card(self, height=_lines_height(6))
+        input_card.pack(fill="x", pady=(theme.PAD_SM, 0))
+        self._text = tk.Text(
+            input_card.body, height=6, font=theme.FONT_MONO, wrap="word",
+            bg=theme.SURFACE, fg=theme.TEXT, relief="flat", bd=0, highlightthickness=0,
+            padx=theme.PAD_SM, pady=theme.PAD_SM,
+        )
+        self._text.pack(fill="both", expand=True, padx=1, pady=1)
+        bar = ttk.Frame(self)
+        bar.pack(fill="x", pady=(theme.GAP, 0))
+        RoundButton(bar, "检测文本", self._detect_text, kind="accent").pack(side="left")
+        RoundButton(bar, "检测文件", self._detect_file).pack(side="left", padx=theme.GAP)
+        RoundButton(bar, "清空", lambda: self._text.delete("1.0", "end")).pack(side="left")
+        ttk.Label(self, text="检测结果", style="Sub.TLabel").pack(
+            anchor="w", pady=(theme.GAP, 0),
+        )
+        result_card = Card(self)
+        result_card.pack(fill="both", expand=True, pady=(theme.PAD_SM, 0))
+        self._table = DataTable(
+            result_card.body, DET_COLS, headings=DET_HEADS, widths=DET_WIDTHS,
+        )
+        self._table.pack(fill="both", expand=True, padx=1, pady=1)
 
     def on_show(self) -> None:
         self._update_gate()

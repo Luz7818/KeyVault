@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
+from kv.gui.controls import Card, RoundButton
 from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
 CORR_COLS = ("id", "kind", "pattern", "platform")
@@ -49,44 +50,45 @@ class CapturePage(ttk.Frame):
     def _build_watch(self) -> None:
         bar = ttk.Frame(self._watch_tab)
         bar.pack(fill="x")
-        self._watch_btn = ttk.Button(
-            bar, text="开始监控", style="Accent.TButton", command=self._toggle_watch,
+        self._watch_btn = RoundButton(
+            bar, "开始监控", self._toggle_watch, kind="accent",
         )
         self._watch_btn.pack(side="left")
-        ttk.Button(bar, text="清扫过期", command=self._do_sweep).pack(side="left", padx=theme.GAP)
+        RoundButton(bar, "清扫过期", self._do_sweep).pack(side="left", padx=theme.GAP)
+        watch_card = Card(self._watch_tab)
+        watch_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._watch_log = tk.Listbox(
-            self._watch_tab, font=theme.FONT_SMALL, height=14,
+            watch_card.body, font=theme.FONT_SMALL, height=14,
             bg=theme.SURFACE, fg=theme.TEXT,
             selectbackground=theme.TABLE_SELECT_BG, selectforeground=theme.TEXT,
             activestyle="none",
         )
-        theme.flat(self._watch_log)
-        self._watch_log.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        self._watch_log.pack(fill="both", expand=True, padx=1, pady=1)
 
     def _build_review(self) -> None:
         bar = ttk.Frame(self._review_tab)
         bar.pack(fill="x")
-        ttk.Button(bar, text="加载待审", command=self._load_inbox).pack(side="left")
-        ttk.Button(
-            bar, text="接受", style="Accent.TButton",
-            command=lambda: self._review_action("accept"),
+        RoundButton(bar, "加载待审", self._load_inbox).pack(side="left")
+        RoundButton(
+            bar, "接受", lambda: self._review_action("accept"), kind="accent",
         ).pack(side="left", padx=theme.GAP)
-        ttk.Button(bar, text="跳过", command=lambda: self._review_action("skip")).pack(side="left")
+        RoundButton(bar, "跳过", lambda: self._review_action("skip")).pack(side="left")
+        review_card = Card(self._review_tab)
+        review_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._review_list = tk.Listbox(
-            self._review_tab, font=theme.FONT_SMALL, height=12,
+            review_card.body, font=theme.FONT_SMALL, height=12,
             bg=theme.SURFACE, fg=theme.TEXT,
             selectbackground=theme.TABLE_SELECT_BG, selectforeground=theme.TEXT,
             activestyle="none",
         )
-        theme.flat(self._review_list)
-        self._review_list.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        self._review_list.pack(fill="both", expand=True, padx=1, pady=1)
         self._review_items: list[Any] = []
 
     def _build_fix(self) -> None:
         bar = ttk.Frame(self._fix_tab)
         bar.pack(fill="x")
-        ttk.Button(bar, text="加载未识别", command=self._load_unresolved).pack(side="left")
-        ttk.Button(bar, text="设置平台", command=self._fix_selected).pack(side="left", padx=theme.GAP)
+        RoundButton(bar, "加载未识别", self._load_unresolved).pack(side="left")
+        RoundButton(bar, "设置平台", self._fix_selected, kind="accent").pack(side="left", padx=theme.GAP)
         self._fix_table = DataTable(self._fix_tab, FIX_COLS, headings=FIX_HEADS, widths=FIX_WIDTHS)
         self._fix_table.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._fix_rows: list[Any] = []
@@ -94,15 +96,15 @@ class CapturePage(ttk.Frame):
     def _build_corrections(self) -> None:
         bar = ttk.Frame(self._corr_tab)
         bar.pack(fill="x")
-        ttk.Button(bar, text="加载", command=self._load_corrections).pack(side="left")
-        ttk.Button(bar, text="删除选中", command=self._delete_correction).pack(side="left", padx=theme.GAP)
+        RoundButton(bar, "加载", self._load_corrections).pack(side="left")
+        RoundButton(bar, "删除选中", self._delete_correction, kind="danger").pack(side="left", padx=theme.GAP)
         self._corr_table = DataTable(self._corr_tab, CORR_COLS, headings=CORR_HEADS, widths=CORR_WIDTHS)
         self._corr_table.pack(fill="both", expand=True, pady=(theme.GAP, 0))
 
     def _toggle_watch(self) -> None:
         if self._watch_thread and self._watch_thread.is_alive():
             self._watch_stop.set()
-            self._watch_btn.config(text="开始监控")
+            self._watch_btn.set_text("开始监控")
             self._log_watch("监控已停止")
             return
         store = self._app.store
@@ -240,7 +242,7 @@ class CapturePage(ttk.Frame):
             win.destroy()
             self._app.set_status(f"已设置：{row['name']} → {platform}", color=theme.SUCCESS)
             self._load_unresolved()
-        ttk.Button(win, text="确定", command=on_ok).pack(pady=8)
+        RoundButton(win, "确定", on_ok, kind="accent").pack(pady=theme.PAD_SM)
 
     def _load_corrections(self) -> None:
         from kv.ops.fix import list_corrections

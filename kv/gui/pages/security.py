@@ -7,6 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
+from kv.gui.controls import Card, RoundButton
 from kv.gui.widgets import DataTable, PageHeader
 
 SCAN_COLS = ("path", "line_no", "name", "platform", "status")
@@ -45,23 +46,31 @@ class SecurityPage(ttk.Frame):
         bar.pack(fill="x")
         self._scan_dir = tk.StringVar(value=".")
         ttk.Entry(bar, textvariable=self._scan_dir, width=40).pack(side="left", fill="x", expand=True)
-        ttk.Button(bar, text="浏览", command=self._pick_dir).pack(side="left", padx=theme.GAP)
-        ttk.Button(bar, text="扫描", style="Accent.TButton", command=self._do_scan).pack(side="left")
-        self._scan_table = DataTable(self._scan_tab, SCAN_COLS, headings=SCAN_HEADS, widths=SCAN_WIDTHS)
-        self._scan_table.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        RoundButton(bar, "浏览", self._pick_dir).pack(side="left", padx=theme.GAP)
+        RoundButton(bar, "扫描", self._do_scan, kind="accent").pack(side="left")
+        scan_card = Card(self._scan_tab)
+        scan_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        self._scan_table = DataTable(
+            scan_card.body, SCAN_COLS, headings=SCAN_HEADS, widths=SCAN_WIDTHS,
+        )
+        self._scan_table.pack(fill="both", expand=True, padx=1, pady=1)
 
     def _build_audit(self) -> None:
         bar = ttk.Frame(self._audit_tab)
         bar.pack(fill="x")
-        ttk.Button(bar, text="加载日志", command=self._load_audit).pack(side="left")
-        ttk.Button(bar, text="校验链", command=self._verify_audit).pack(side="left", padx=theme.GAP)
-        self._audit_table = DataTable(self._audit_tab, AUDIT_COLS, headings=AUDIT_HEADS, widths=AUDIT_WIDTHS)
-        self._audit_table.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        RoundButton(bar, "加载日志", self._load_audit).pack(side="left")
+        RoundButton(bar, "校验链", self._verify_audit).pack(side="left", padx=theme.GAP)
+        audit_card = Card(self._audit_tab)
+        audit_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        self._audit_table = DataTable(
+            audit_card.body, AUDIT_COLS, headings=AUDIT_HEADS, widths=AUDIT_WIDTHS,
+        )
+        self._audit_table.pack(fill="both", expand=True, padx=1, pady=1)
 
     def _build_maint(self) -> None:
         exp = ttk.LabelFrame(self._maint_tab, text="过期检查", padding=theme.PAD)
         exp.pack(fill="x")
-        ttk.Button(exp, text="标记过期记录", command=self._do_expire).pack(side="left")
+        RoundButton(exp, "标记过期记录", self._do_expire).pack(side="left")
         self._expire_label = ttk.Label(exp, text="", font=theme.FONT_SMALL)
         self._expire_label.pack(side="left", padx=theme.PAD)
         pur = ttk.LabelFrame(self._maint_tab, text="清除", padding=theme.PAD)
@@ -71,8 +80,8 @@ class SecurityPage(ttk.Frame):
         ttk.Radiobutton(pur, text="删除（整行移除）", variable=self._purge_mode, value="delete").pack(anchor="w")
         btn_bar = ttk.Frame(pur)
         btn_bar.pack(fill="x", pady=(theme.GAP, 0))
-        ttk.Button(btn_bar, text="预览（dry-run）", command=lambda: self._do_purge(dry=True)).pack(side="left")
-        ttk.Button(btn_bar, text="执行清除", style="Danger.TButton", command=lambda: self._do_purge(dry=False)).pack(side="left", padx=theme.GAP)
+        RoundButton(btn_bar, "预览（dry-run）", lambda: self._do_purge(dry=True)).pack(side="left")
+        RoundButton(btn_bar, "执行清除", lambda: self._do_purge(dry=False), kind="danger").pack(side="left", padx=theme.GAP)
 
     def _pick_dir(self) -> None:
         d = filedialog.askdirectory(parent=self, title="选择扫描目录")
