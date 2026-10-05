@@ -1,0 +1,19 @@
+{"id":"anthropic-sk-ant","input":"sk-ant-api03-<48位合成>","expect":"accepted","expect_count":1,"expect_platform":"anthropic","expect_confidence":"medium","expect_source":"shape","expect_kind":"token"}
+{"id":"github-ghp-lowercase","input":"ghp_<36位字母数字>","expect":"accepted","expect_count":1,"expect_platform":"github","expect_confidence":"medium","expect_source":"shape"}
+{"id":"github-ghp-uppercase","input":"GHP_<36位字母数字>","expect":"accepted","expect_platform":"github","expect_confidence":"medium","expect_source":"shape"}
+{"id":"github-fine-grained-pat","input":"github_pat_<40位字母数字>","expect":"accepted","expect_platform":"github"}
+{"id":"aws-access-key-id","input":"AKIA<16位大写>","expect":"accepted","expect_platform":"aws-access-key-id","expect_confidence":"medium","expect_source":"shape"}
+{"id":"google-aiza","input":"AIza<35位字母数字>","expect":"accepted","expect_platform":"google"}
+{"id":"gitlab-glpat","input":"glpat-<20位字母数字>","expect":"accepted","expect_platform":"gitlab"}
+{"id":"slack-xoxb","input":"xoxb-<20位字母数字>","expect":"accepted","expect_platform":"slack"}
+{"id":"vercel-token","input":"vercel_<20位字母数字>","expect":"accepted","expect_platform":"vercel"}
+{"id":"npm-token","input":"npm_<40位字母数字>","expect":"accepted","expect_platform":"npm"}
+{"id":"telegram-bot-token","input":"123456789:<36位字母数字>","expect":"accepted","expect_platform":"telegram"}
+{"id":"stripe-live-secret","input":"sk_live_<24位>","expect":"accepted","expect_platform":"stripe"}
+{"id":"modelscope-ms","input":"ms-<24位>","expect":"accepted","expect_platform":"modelscope"}
+{"id":"wechat-appid","input":"wx0123456789abcdef","expect":"accepted","expect_platform":"wechat-appid"}
+{"id":"jwt-three-segments","input":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.<24位>","expect":"accepted","expect_platform":"jwt","expect_confidence":"medium"}
+{"id":"openai-project-key-is-not-ambiguous","input":"sk-proj-<48位合成>","expect":"accepted","expect_count":1,"expect_platform":"openai-project","expect_confidence":"medium","expect_not":"openai-compatible"}
+{"id":"pem-private-key-block","input":"-----BEGIN PRIVATE KEY-----\n<合成 200 字符 base64>\n-----END PRIVATE KEY-----","expect":"accepted","expect_count":1,"expect_platform":"pem-private-key","expect_kind":"pem"}
+{"id":"connection-string-with-password","input":"postgres://app_user:<24位>@db.internal.example:5432/app","expect":"accepted","expect_count":1,"expect_platform":"connection-string","expect_kind":"connstring"}
+{"id":"shape-mask-style-keeps-prefix","input":"glpat-<20位字母数字>","expect":"accepted","expect_platform":"gitlab","expect_source":"shape"}
