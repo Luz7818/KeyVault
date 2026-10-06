@@ -7,7 +7,7 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
-from kv.gui.controls import Card, RoundButton
+from kv.gui.controls import Card, RoundButton, RoundEntry
 from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
 COLUMNS = ("name", "platform", "status", "preview", "created_at")
@@ -33,6 +33,10 @@ class SecretsPage(ttk.Frame):
             on_double=lambda r: self._on_show(r["name"]),
             on_right_click=self._on_right_click,
         )
+        for status, color in (
+            ("active", theme.SUCCESS), ("revoked", theme.ERROR), ("expired", theme.WARNING),
+        ):
+            self._table.tree.tag_configure(f"st-{status}", foreground=color)
         self._table.pack(fill="both", expand=True, padx=1, pady=1)
         self._build_menu()
 
@@ -41,7 +45,7 @@ class SecretsPage(ttk.Frame):
         bar.pack(fill="x")
         self._search = tk.StringVar()
         self._search.trace_add("write", lambda *_: self.refresh())
-        ttk.Entry(bar, textvariable=self._search, width=24).pack(side="left")
+        RoundEntry(bar, textvariable=self._search, width=260).pack(side="left")
         ttk.Label(bar, text="搜索", style="Sub.TLabel").pack(side="left", padx=(8, theme.PAD))
         self._status_filter = tk.StringVar(value="")
         cb = ttk.Combobox(
@@ -97,7 +101,7 @@ class SecretsPage(ttk.Frame):
             self._table.insert_row((
                 row.name, row.platform, row.status,
                 row.preview("*"), created,
-            ))
+            ), tags=(f"st-{row.status}",))
         self._app.set_status(f"{len(self._rows)} 条记录")
 
     def _on_add(self) -> None:

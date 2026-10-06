@@ -8,7 +8,7 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
-from kv.gui.controls import Card, RoundButton
+from kv.gui.controls import Card, RoundButton, TabBar
 from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
 CORR_COLS = ("id", "kind", "pattern", "platform")
@@ -32,16 +32,13 @@ class CapturePage(ttk.Frame):
         PageHeader(self, "捕获", "剪贴板监听——候选先进审批队列，接受后才入库").pack(
             anchor="w", pady=(0, theme.GAP),
         )
-        nb = ttk.Notebook(self)
+        nb = TabBar(self)
         nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
-        self._watch_tab = ttk.Frame(nb, padding=theme.PAD)
-        self._review_tab = ttk.Frame(nb, padding=theme.PAD)
-        self._fix_tab = ttk.Frame(nb, padding=theme.PAD)
-        self._corr_tab = ttk.Frame(nb, padding=theme.PAD)
-        nb.add(self._watch_tab, text="剪贴板监控")
-        nb.add(self._review_tab, text="审批队列")
-        nb.add(self._fix_tab, text="修复未识别")
-        nb.add(self._corr_tab, text="纠正规则")
+        self._nb = nb
+        self._watch_tab = nb.add("watch", "剪贴板监控")
+        self._review_tab = nb.add("review", "审批队列")
+        self._fix_tab = nb.add("fix", "修复未识别")
+        self._corr_tab = nb.add("corr", "纠正规则")
         self._build_watch()
         self._build_review()
         self._build_fix()

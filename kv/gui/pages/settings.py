@@ -8,7 +8,7 @@ from tkinter import messagebox, ttk
 
 from kv import __version__
 from kv.gui import theme
-from kv.gui.controls import Card, RoundButton
+from kv.gui.controls import Card, RoundButton, RoundEntry
 from kv.gui.widgets import PageHeader
 
 
@@ -51,10 +51,12 @@ class SettingsPage(ttk.Frame):
             return
         keys = ["mask_char"]
         for i, key in enumerate(keys):
-            ttk.Label(self._settings_frame, text=key).grid(row=i, column=0, sticky="w", pady=2)
+            ttk.Label(self._settings_frame, text=key, style="Sub.TLabel").grid(
+                row=i, column=0, sticky="w", pady=2,
+            )
             var = tk.StringVar(value=store.get_setting(key, ""))
             self._setting_vars[key] = var
-            ttk.Entry(self._settings_frame, textvariable=var, width=20).grid(
+            RoundEntry(self._settings_frame, textvariable=var, width=180).grid(
                 row=i, column=1, sticky="w", pady=2, padx=(theme.GAP, 0),
             )
         ttk.Button(self._settings_frame, text="保存", command=self._save_settings).grid(

@@ -109,3 +109,26 @@
 - **杂项**：GET-START 示例输出 `<detected>` 改真实示例值并加注；kv/README 删模板残留段；
   ARCHITECTURE 树 `<九件文档>` 占位改普通标注；目录说明树删除与 ARCHITECTURE
   根文件表重复的职责短语；TODO「正在做」随迁移完成更新。
+
+## 2026-10-06 · GUI 质感对标成熟案例：自绘图标/标签页/滚动条/输入框
+
+- 用户反馈仍不美观——根因是 ttk 原生控件（Notebook 方角 tab、系统滚动
+  条、方角 Entry）无法深度美化。本轮把「关键表面」全部自绘：
+  - `kv/gui/icons.py`：6 枚 Canvas 线条图标（钥匙/放大镜/闪电/层叠/
+    盾牌/滑杆），颜色随选中态重绘，不依赖图标字体的跨版本渲染；
+  - `controls.TabBar`：替代 ttk.Notebook——pill 导航条（选中底色弹簧
+    滑动、文字色过渡）+ place 堆叠内容区；capture/ingest/security 三页
+    全部换装；
+  - `controls.SlimScrollbar`：8px 圆角细滚动条（hover 加深、拖动/滚轮/
+    点击轨道），DataTable 内置，系统滚动条全部退役；
+  - `controls.RoundEntry`：圆角描边输入框（聚焦变主色），搜索/路径/
+    表单/配置项全部换装。
+- 侧边栏导航分组（密钥/工具/系统）+ 图标；表格状态列着色（active 绿 /
+  revoked 红 / expired 橙）。
+- 修复中发现的组件 bug：TabBar 初始堆叠未 raise 当前页、`<Configure>`
+  重排清掉选中 pill 不重画、RoundEntry 全高 Entry 盖住描边上下边、
+  SlimScrollbar 误用 Canvas 不存在的 command 选项。
+- 验证：全量 548 条 `OK (skipped=2)`；六页截图目检（含 TabBar 切换、
+  表单对齐）；`pyinstaller kv.spec` 重打包通过。
+- 数字口径：源文件 90→91 个 `.py`、16 396→16 746 行（新增 icons.py 等，
+  README/AGENTS 已同步）。

@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
-from kv.gui.controls import Card, RoundButton
+from kv.gui.controls import Card, RoundButton, RoundEntry, TabBar
 from kv.gui.widgets import DataTable, PageHeader
 
 SCAN_COLS = ("path", "line_no", "name", "platform", "status")
@@ -29,14 +29,11 @@ class SecurityPage(ttk.Frame):
         PageHeader(self, "安全", "泄露扫描、审计溯源、过期清除").pack(
             anchor="w", pady=(0, theme.GAP),
         )
-        nb = ttk.Notebook(self)
+        nb = TabBar(self)
         nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
-        self._scan_tab = ttk.Frame(nb, padding=theme.PAD)
-        self._audit_tab = ttk.Frame(nb, padding=theme.PAD)
-        self._maint_tab = ttk.Frame(nb, padding=theme.PAD)
-        nb.add(self._scan_tab, text="泄露扫描")
-        nb.add(self._audit_tab, text="审计日志")
-        nb.add(self._maint_tab, text="过期 / 清除")
+        self._scan_tab = nb.add("scan", "泄露扫描")
+        self._audit_tab = nb.add("audit", "审计日志")
+        self._maint_tab = nb.add("maint", "过期 / 清除")
         self._build_scan()
         self._build_audit()
         self._build_maint()
@@ -45,7 +42,9 @@ class SecurityPage(ttk.Frame):
         bar = ttk.Frame(self._scan_tab)
         bar.pack(fill="x")
         self._scan_dir = tk.StringVar(value=".")
-        ttk.Entry(bar, textvariable=self._scan_dir, width=40).pack(side="left", fill="x", expand=True)
+        RoundEntry(bar, textvariable=self._scan_dir, width=460).pack(
+            side="left", fill="x", expand=True,
+        )
         RoundButton(bar, "浏览", self._pick_dir).pack(side="left", padx=theme.GAP)
         RoundButton(bar, "扫描", self._do_scan, kind="accent").pack(side="left")
         scan_card = Card(self._scan_tab)

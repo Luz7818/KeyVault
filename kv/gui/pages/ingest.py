@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from kv.gui import theme
-from kv.gui.controls import Card, RoundButton
+from kv.gui.controls import Card, RoundButton, RoundEntry, TabBar
 from kv.gui.widgets import FormDialog, PageHeader
 
 
@@ -21,14 +21,11 @@ class IngestPage(ttk.Frame):
         PageHeader(self, "批量操作", "从 .env / CSV 批量导入，注入或轮换").pack(
             anchor="w", pady=(0, theme.GAP),
         )
-        nb = ttk.Notebook(self)
+        nb = TabBar(self)
         nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
-        self._import_tab = ttk.Frame(nb, padding=theme.PAD)
-        self._inject_tab = ttk.Frame(nb, padding=theme.PAD)
-        self._rotate_tab = ttk.Frame(nb, padding=theme.PAD)
-        nb.add(self._import_tab, text="导入")
-        nb.add(self._inject_tab, text="注入 .env")
-        nb.add(self._rotate_tab, text="轮换 / 吊销")
+        self._import_tab = nb.add("import", "导入")
+        self._inject_tab = nb.add("inject", "注入 .env")
+        self._rotate_tab = nb.add("rotate", "轮换 / 吊销")
         self._build_import()
         self._build_inject()
         self._build_rotate()
@@ -37,13 +34,15 @@ class IngestPage(ttk.Frame):
         bar = ttk.Frame(self._import_tab)
         bar.pack(fill="x")
         self._import_path = tk.StringVar()
-        ttk.Entry(bar, textvariable=self._import_path, width=40).pack(side="left", fill="x", expand=True)
+        RoundEntry(bar, textvariable=self._import_path, width=460).pack(
+            side="left", fill="x", expand=True,
+        )
         RoundButton(bar, "浏览", self._pick_import).pack(side="left", padx=theme.GAP)
         opts = ttk.Frame(self._import_tab)
         opts.pack(fill="x", pady=(theme.GAP, 0))
         self._import_tags = tk.StringVar()
         ttk.Label(opts, text="标签（逗号分隔）：", style="Sub.TLabel").pack(side="left")
-        ttk.Entry(opts, textvariable=self._import_tags, width=20).pack(side="left", padx=theme.GAP)
+        RoundEntry(opts, textvariable=self._import_tags, width=200).pack(side="left", padx=theme.GAP)
         self._import_force = tk.BooleanVar(value=False)
         ttk.Checkbutton(opts, text="强制（跳过不可信判定）", variable=self._import_force).pack(side="left", padx=theme.PAD)
         RoundButton(self._import_tab, "导入", self._do_import, kind="accent").pack(pady=theme.PAD, anchor="w")
@@ -58,15 +57,17 @@ class IngestPage(ttk.Frame):
     def _build_inject(self) -> None:
         form = ttk.Frame(self._inject_tab)
         form.pack(fill="x")
-        ttk.Label(form, text="密钥名称：").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Label(form, text="密钥名称：", style="Sub.TLabel").grid(row=0, column=0, sticky="w", pady=(9, 0))
         self._inject_name = tk.StringVar()
-        ttk.Entry(form, textvariable=self._inject_name, width=30).grid(row=0, column=1, sticky="w", padx=theme.GAP)
-        ttk.Label(form, text="目标 .env：").grid(row=1, column=0, sticky="w", pady=4)
+        RoundEntry(form, textvariable=self._inject_name, width=280).grid(
+            row=0, column=1, sticky="w", padx=theme.GAP,
+        )
+        ttk.Label(form, text="目标 .env：", style="Sub.TLabel").grid(row=1, column=0, sticky="w", pady=(9, 0))
         inj_bar = ttk.Frame(form)
         inj_bar.grid(row=1, column=1, sticky="ew")
         self._inject_target = tk.StringVar()
-        ttk.Entry(inj_bar, textvariable=self._inject_target, width=30).pack(side="left", fill="x", expand=True)
-        ttk.Button(inj_bar, text="浏览", command=self._pick_inject_target).pack(side="left", padx=theme.GAP)
+        RoundEntry(inj_bar, textvariable=self._inject_target, width=280).pack(side="left", fill="x", expand=True)
+        RoundButton(inj_bar, "浏览", self._pick_inject_target).pack(side="left", padx=theme.GAP)
         self._inject_gitignore = tk.BooleanVar(value=True)
         ttk.Checkbutton(form, text="自动加 .gitignore", variable=self._inject_gitignore).grid(
             row=2, column=1, sticky="w", pady=4,
@@ -78,12 +79,14 @@ class IngestPage(ttk.Frame):
     def _build_rotate(self) -> None:
         form = ttk.Frame(self._rotate_tab)
         form.pack(fill="x")
-        ttk.Label(form, text="密钥名称：").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Label(form, text="密钥名称：", style="Sub.TLabel").grid(row=0, column=0, sticky="w", pady=(9, 0))
         self._rotate_name = tk.StringVar()
-        ttk.Entry(form, textvariable=self._rotate_name, width=30).grid(row=0, column=1, sticky="w", padx=theme.GAP)
-        ttk.Label(form, text="新值：").grid(row=1, column=0, sticky="w", pady=4)
+        RoundEntry(form, textvariable=self._rotate_name, width=280).grid(
+            row=0, column=1, sticky="w", padx=theme.GAP,
+        )
+        ttk.Label(form, text="新值：", style="Sub.TLabel").grid(row=1, column=0, sticky="w", pady=(9, 0))
         self._rotate_value = tk.StringVar()
-        ttk.Entry(form, textvariable=self._rotate_value, width=40, show="*").grid(
+        RoundEntry(form, textvariable=self._rotate_value, width=360, show="*").grid(
             row=1, column=1, sticky="w", padx=theme.GAP,
         )
         btn_bar = ttk.Frame(self._rotate_tab)

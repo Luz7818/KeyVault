@@ -8,16 +8,13 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any, Callable
 
-from kv.gui import motion, theme
+from kv.gui import icons, motion, theme
 from kv.gui.widgets import StatusLabel
 
-NAV_ITEMS: list[tuple[str, str]] = [
-    ("secrets", "密钥管理"),
-    ("detect", "检测"),
-    ("capture", "捕获"),
-    ("ingest", "批量操作"),
-    ("security", "安全"),
-    ("settings", "设置"),
+NAV_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
+    ("密钥", [("secrets", "密钥管理")]),
+    ("工具", [("detect", "检测"), ("capture", "捕获"), ("ingest", "批量操作")]),
+    ("系统", [("security", "安全"), ("settings", "设置")]),
 ]
 
 
@@ -35,6 +32,7 @@ class App(tk.Tk):
         self._queue: queue.Queue[tuple[Callable, tuple, dict]] = queue.Queue()
         self._pages: dict[str, tk.Widget] = {}
         self._nav_buttons: dict[str, tk.Button] = {}
+        self._nav_icons: dict[str, tuple[tk.Canvas, int]] = {}
         self._page_slides: dict[str, motion.Spring] = {}
         self._current: str = ""
         self._build_layout()
@@ -64,25 +62,45 @@ class App(tk.Tk):
 
         nav = tk.Frame(self._sidebar, bg=theme.SIDEBAR_BG)
         nav.pack(fill="x", pady=(theme.PAD_SM, 0))
-        for key, label in NAV_ITEMS:
-            btn = tk.Button(
-                nav, text=label, anchor="w",
-                font=theme.FONT, bg=theme.SIDEBAR_BG, fg=theme.SIDEBAR_FG,
-                activebackground=theme.SIDEBAR_ACTIVE_BG,
-                activeforeground=theme.SIDEBAR_ACTIVE_FG,
-                relief="flat", bd=0, padx=theme.PAD, pady=theme.PAD_SM,
-                cursor="hand2", command=lambda k=key: self.show_page(k),
-            )
-            btn.pack(fill="x")
-            btn.bind("<Enter>", lambda e, b=btn: self._nav_tint(b, theme.SIDEBAR_HOVER_FG))
-            btn.bind("<Leave>", lambda e, b=btn: self._nav_tint(b, self._nav_rest_color(b)))
-            self._nav_buttons[key] = btn
+        icon_size = round(18 * theme.SCALE)
+        for section, entries in NAV_SECTIONS:
+            tk.Label(
+                nav, text=section, font=theme.FONT_SUBTITLE,
+                bg=theme.SIDEBAR_BG, fg=theme.SIDEBAR_MUTED, anchor="w",
+            ).pack(fill="x", padx=theme.PAD, pady=(theme.PAD, theme.PAD_SM))
+            for key, label in entries:
+                row = tk.Frame(nav, bg=theme.SIDEBAR_BG)
+                row.pack(fill="x")
+                icon = tk.Canvas(
+                    row, width=icon_size, height=icon_size,
+                    bg=theme.SIDEBAR_BG, highlightthickness=0, bd=0,
+                )
+                icon.pack(side="left", padx=(theme.PAD + 2, 0))
+                icons.ICONS[key](icon, icon_size / 2, icon_size / 2, icon_size, theme.SIDEBAR_FG)
+                btn = tk.Button(
+                    row, text=label, anchor="w",
+                    font=theme.FONT, bg=theme.SIDEBAR_BG, fg=theme.SIDEBAR_FG,
+                    activebackground=theme.SIDEBAR_ACTIVE_BG,
+                    activeforeground=theme.SIDEBAR_ACTIVE_FG,
+                    relief="flat", bd=0, padx=theme.PAD_SM, pady=theme.PAD_SM,
+                    cursor="hand2", command=lambda k=key: self.show_page(k),
+                )
+                btn.pack(side="left", fill="x", expand=True)
+                btn.bind("<Enter>", lambda e, b=btn: self._nav_tint(b, theme.SIDEBAR_HOVER_FG))
+                btn.bind("<Leave>", lambda e, b=btn: self._nav_tint(b, self._nav_rest_color(b)))
+                self._nav_buttons[key] = btn
+                self._nav_icons[key] = (icon, icon_size)
 
         # 指示条：单实例，切换时弹簧滑到目标项旁边——比逐项变色更有"实体感"
         self._indicator = tk.Frame(nav, bg=theme.SIDEBAR_INDICATOR, width=3, height=1)
         self._indicator_y = motion.Spring(self, lambda y: self._place_indicator(y))
         self._content = tk.Frame(self, bg=theme.SURFACE)
         self._content.pack(side="left", fill="both", expand=True)
+
+    def _recolor_icon(self, key: str, color: str) -> None:
+        icon, size = self._nav_icons[key]
+        icon.delete("all")
+        icons.ICONS[key](icon, size / 2, size / 2, size, color)
 
     def _nav_rest_color(self, btn: tk.Button) -> str:
         active = btn is self._nav_buttons.get(self._current)
@@ -135,6 +153,9 @@ class App(tk.Tk):
             btn.config(
                 bg=theme.SIDEBAR_ACTIVE_BG if active else theme.SIDEBAR_BG,
                 fg=theme.SIDEBAR_ACTIVE_FG if active else theme.SIDEBAR_FG,
+            )
+            self._recolor_icon(
+                k, theme.SIDEBAR_ACTIVE_FG if active else theme.SIDEBAR_FG,
             )
         self._move_indicator(self._nav_buttons[key])
         for k, page in self._pages.items():

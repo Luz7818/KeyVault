@@ -7,7 +7,7 @@ from tkinter import messagebox, ttk
 from typing import Any, Callable, Sequence
 
 from kv.gui import theme
-from kv.gui.controls import RoundButton
+from kv.gui.controls import RoundButton, SlimScrollbar
 
 
 class DataTable(ttk.Frame):
@@ -35,12 +35,10 @@ class DataTable(ttk.Frame):
         self.tree = ttk.Treeview(
             self, columns=self._columns, show="headings", selectmode="browse",
         )
-        vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
-        hsb = ttk.Scrollbar(self, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        # 细自绘滚动条；横滚动条去掉——列宽由内容决定，横向拖动是老式观感的来源
+        vsb = SlimScrollbar(self, self.tree)
         self.tree.grid(row=0, column=0, sticky="nsew")
         vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         for i, col in enumerate(self._columns):
