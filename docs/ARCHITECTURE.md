@@ -22,7 +22,7 @@ KeyVault/
 ├── runtests.py        unittest 发现 shim
 ├── kv.spec            PyInstaller 打包配置
 ├── build.bat          Windows 构建脚本
-└── <九件文档>          README / AGENTS / 目录说明 / HISTORY / TODO / docs/
+└── (九件文档)         README / AGENTS / 目录说明 / HISTORY / TODO / docs/
 ```
 
 | 文件 | 用途 |

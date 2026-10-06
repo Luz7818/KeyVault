@@ -50,8 +50,10 @@ python kv.py list
 
 ```
   #  名称          平台         状态    创建时间
-  1  my-api-key    <detected>   active  2026-10-04 ...
+  1  my-api-key    deepseek     active  2026-10-04 ...
 ```
+
+（平台列是 `kv` 识别出的平台 id，`deepseek` 只是示例值。）
 
 各参数含义：
 
@@ -177,4 +179,4 @@ python -I -m unittest tests.test_your_module -v
 python -I -m unittest discover -s tests -t .
 ```
 
-通过标准：退出码 0、543 个用例通过（允许 2 个 skip）。这几条命令的含义写在仓库根的 `AGENTS.md`。
+通过标准：退出码 0、548 个用例通过（允许 2 个 skip）。这几条命令的含义写在仓库根的 `AGENTS.md`。

@@ -18,9 +18,6 @@ kv 是项目的核心 Python 包。它接收 CLI 命令（来自 `kv.py` shim �
 | `clock.py` | 时间抽象（可注入 FakeClock 用于测试） | 被测试引用 |
 | `selftest.py` | 检测规则自测引擎 + golden 语料运行 | `kv selftest --golden` |
 
-超过 30 个文件时,只列对外有接口的;其余写清命名规律,例如
-`<其余:case_*.json,一个文件一条测试用例,由 runner 逐个加载>`。
-
 ## 子目录
 
 | 子目录 | 负责 |

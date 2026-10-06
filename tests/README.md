@@ -1,4 +1,4 @@
-# tests/ —— 测试套件：543 条用例 + 金标语料
+# tests/ —— 测试套件：548 条用例 + 金标语料
 
 > 用途：说明本目录在整个项目里管哪一段,以及每个文件干什么。
 
@@ -34,7 +34,37 @@ tests 包含 kv 项目的全部测试：单元测试、集成测试、CLI 端到
 
 | 子目录 | 负责 |
 |---|---|
-| `corpus/` | 检测规则金标语料（JSONL 格式），`kv selftest --golden` 加载 |
+| `corpus/` | 检测规则金标语料（JSONL 格式），`kv selftest --golden` 加载；下钻说明见下节 |
+
+## corpus/ —— 金标语料（下钻说明）
+
+一行一个 JSON 用例，由 `kv selftest --golden` 跑。这是检测器的**存在理由**：
+本项目的前身出过三次「检测器静默失效却输出全仓干净」，所以任何改动都要先过这里。
+
+**所有 fixture 值都是合成的**：由 `kv/selftest.py` 的 `SYNTHETIC` 表在跑之前展开，
+语料文件里只有占位符（`<48位合成>` / `<32hex>` / `<64hex>` / `<36位字母数字>` 等，
+展开规则全表见 `kv/selftest.py`），不来自任何真实凭据，所以**可以安全提交、可以安全打印**
+—— `--golden` 失败时打印用例也不构成泄漏。加一个新占位符要同时改 `SYNTHETIC` 和语料。
+
+| 文件 | 管什么 |
+|---|---|
+| `01-shape.jsonl` | 值形态独有的平台，形态命中即可直接判定 |
+| `02-context.jsonl` | 分级优先级：主机名 > 键名 > 形态 > 窗口标题 |
+| `03-negative.jsonl` | **反例**：占位符、哈希形态、歧义必须如实报告而不是猜 |
+| `04-structures.jsonl` | curl / JSON / AWS CSV / 整段 .env 的结构解析 |
+
+用例字段：`id`、`input` 必填；`window_title` 可选，模拟前台窗口标题。断言字段都是可选的，
+只断言写了的那些：`expect`（`accepted`/`rejected`）、`expect_reason`（配合 `rejected`：
+`placeholder` / `not-a-secret` / `empty` / `too-long`）、`expect_count`（候选条数）、
+`expect_platform` / `expect_platforms`（第一/全部候选平台 id）、`expect_confidence`
+（`manual`…`none` 六档）、`expect_source`（`correction`/`hostname`/`keyname`/`shape`/`window`/`none`）、
+`expect_kind`（`token`/`json`/`pem`/`pair`/`connstring`）、`expect_not`（这个平台不得出现）、
+`expect_candidates_min`（歧义候选至少几个）、`expect_refused`（必须判 `none`，除非 `--force`）、
+`expect_extra_has`（`extra` 里必须有的键）、`expect_pair`（两条候选共享 `pair_id`）。
+
+跑法与防线：`kv selftest --golden` 全通过则把当前的 `TABLE_HASH` 记进 vault 的 `setting`；
+之后 `kv scan` 会在「表变了而自检没重跑」时拒绝运行并退出码 5 —— 一个静默失效的检测器
+比没有检测器更危险，因为它会说「全仓干净」。
 
 ## 和谁打交道
 

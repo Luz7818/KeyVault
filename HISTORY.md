@@ -98,3 +98,14 @@
 - 排查记录：截图曾显示导航指示条停在错误行——实测是截图脚本 `sleep`
   冻结了 Tk 事件循环、after 动画帧不走所致；主循环正常时弹簧收敛正确，
   应用无 bug。
+
+## 2026-10-06 · 文档核查修复（GUI 批之后数字对齐 + corpus 下钻合规）
+
+- **数字对齐实测**：README/AGENTS 的源文件 88→90 个 `.py`、15 593→16 396 行
+  （10-06 GUI 批新增 controls.py/motion.py 后未回写）；README 目录表与 tests/README
+  标题、GET-START 通过标准的 543→548 对齐 AGENTS「Ran 548」口径。
+- **corpus 下钻合规**：`tests/corpus/README.md` 按规范§1.2「二级不下钻另开 README」
+  并入 tests/README 的「corpus/ —— 金标语料（下钻说明）」节（内容全量保留），原文件删除。
+- **杂项**：GET-START 示例输出 `<detected>` 改真实示例值并加注；kv/README 删模板残留段；
+  ARCHITECTURE 树 `<九件文档>` 占位改普通标注；目录说明树删除与 ARCHITECTURE
+  根文件表重复的职责短语；TODO「正在做」随迁移完成更新。
