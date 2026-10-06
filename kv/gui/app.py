@@ -26,8 +26,8 @@ class App(tk.Tk):
         theme.init(scale)
         theme.setup_style()
         self.title("KeyVault")
-        self.geometry(f"{round(1080 * scale)}x{round(720 * scale)}")
-        self.minsize(round(920 * scale), round(600 * scale))
+        self.geometry(f"{round(1180 * scale)}x{round(780 * scale)}")
+        self.minsize(round(1000 * scale), round(660 * scale))
         self.configure(bg=theme.BG)
         self._queue: queue.Queue[tuple[Callable, tuple, dict]] = queue.Queue()
         self._pages: dict[str, tk.Widget] = {}

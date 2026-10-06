@@ -12,7 +12,7 @@ from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
 COLUMNS = ("name", "platform", "status", "preview", "created_at")
 HEADINGS = ("名称", "平台", "状态", "预览", "创建时间")
-WIDTHS = (130, 100, 70, 180, 140)
+WIDTHS = (155, 120, 80, 205, 165)
 
 
 class SecretsPage(ttk.Frame):

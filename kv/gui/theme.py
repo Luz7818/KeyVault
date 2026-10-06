@@ -61,21 +61,21 @@ FONT_MONO = (MONO_FAMILY, 10)
 
 # ---------------------------------------------------------------- 尺寸
 SCALE = 1.0
-PAD = 16
-PAD_SM = 8
-PAD_LG = 24
-GAP = 10
-SIDEBAR_WIDTH = 208
-STATUS_HEIGHT = 30
-ROW_HEIGHT = 38
-CONTROL_HEIGHT = 38
-RADIUS = 10
+PAD = 18
+PAD_SM = 9
+PAD_LG = 28
+GAP = 12
+SIDEBAR_WIDTH = 236
+STATUS_HEIGHT = 34
+ROW_HEIGHT = 44
+CONTROL_HEIGHT = 42
+RADIUS = 11
 
 # 像素字号基线（scale=1 时），init() 按显示器放大
-_BODY_PX = 15
-_SMALL_PX = 13
-_HEADING_PX = 24
-_MONO_PX = 15
+_BODY_PX = 17
+_SMALL_PX = 14
+_HEADING_PX = 28
+_MONO_PX = 17
 
 
 def init(scale: float) -> None:
@@ -86,15 +86,15 @@ def init(scale: float) -> None:
     global FONT_TABLE, FONT_MONO, MONO_FAMILY
 
     SCALE = scale
-    PAD = _s(16)
-    PAD_SM = _s(8)
-    PAD_LG = _s(24)
-    GAP = _s(10)
-    SIDEBAR_WIDTH = _s(208)
-    STATUS_HEIGHT = _s(30)
-    ROW_HEIGHT = _s(32)
-    CONTROL_HEIGHT = _s(34)
-    RADIUS = _s(9)
+    PAD = _s(18)
+    PAD_SM = _s(9)
+    PAD_LG = _s(28)
+    GAP = _s(12)
+    SIDEBAR_WIDTH = _s(236)
+    STATUS_HEIGHT = _s(34)
+    ROW_HEIGHT = _s(44)
+    CONTROL_HEIGHT = _s(42)
+    RADIUS = _s(11)
 
     FONT = (FONT_FAMILY, -_s(_BODY_PX))
     FONT_BOLD = (FONT_FAMILY, -_s(_BODY_PX), "bold")

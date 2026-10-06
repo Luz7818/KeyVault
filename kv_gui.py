@@ -42,9 +42,26 @@ def _dpi_scale() -> float:
         return 1.0
 
 
+def _ui_scale() -> float:
+    """读用户在设置页选的界面缩放（设置表持久化，默认 100%）。"""
+    try:
+        from kv.core import db, repo
+        from kv.paths import vault_db
+
+        conn = db.connect(vault_db())
+        try:
+            raw = repo.get_setting(conn, "ui_scale", "")
+        finally:
+            conn.close()
+        value = float(raw) if raw else 1.0
+        return value if 0.8 <= value <= 1.6 else 1.0
+    except Exception:
+        return 1.0  # vault 未初始化/损坏时按 100%，不挡启动
+
+
 from kv.gui import theme  # noqa: E402  —— 必须在 sys.path 修好之后导入
 
-theme.init(_dpi_scale())
+theme.init(_dpi_scale() * _ui_scale())
 
 from kv.gui import launch  # noqa: E402
 
