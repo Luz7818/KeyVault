@@ -61,9 +61,9 @@ def _ui_scale() -> float:
 
 from kv.gui import theme  # noqa: E402  —— 必须在 sys.path 修好之后导入
 
-theme.init(_dpi_scale() * _ui_scale())
+theme.init(_dpi_scale())
 
 from kv.gui import launch  # noqa: E402
 
 if __name__ == "__main__":
-    launch()
+    launch(ui_scale=_ui_scale())

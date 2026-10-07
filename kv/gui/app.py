@@ -21,13 +21,23 @@ NAV_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
 class App(tk.Tk):
     """kv GUI 主窗口。"""
 
-    def __init__(self, *, scale: float = 1.0) -> None:
+    def __init__(self, *, scale: float = 1.0, ui_scale: float = 1.0) -> None:
         super().__init__()
         theme.init(scale)
         theme.setup_style()
+        self._ui_scale = max(0.8, min(ui_scale, 1.6))
+        total = scale * self._ui_scale
         self.title("KeyVault")
-        self.geometry(f"{round(1180 * scale)}x{round(780 * scale)}")
-        self.minsize(round(1000 * scale), round(660 * scale))
+        # 缩放档位再大也不能超出屏幕——窗口默认取「理想尺寸」与屏幕 90% 的较小值
+        screen_w, screen_h = self.winfo_screenwidth(), self.winfo_screenheight()
+        want_w, want_h = round(1180 * total), round(780 * total)
+        self.geometry(
+            f"{min(want_w, round(screen_w * 0.95))}x{min(want_h, round(screen_h * 0.88))}"
+        )
+        self.minsize(
+            min(round(1000 * total), round(screen_w * 0.95)),
+            min(round(660 * total), round(screen_h * 0.88)),
+        )
         self.configure(bg=theme.BG)
         self._queue: queue.Queue[tuple[Callable, tuple, dict]] = queue.Queue()
         self._pages: dict[str, tk.Widget] = {}
@@ -38,7 +48,24 @@ class App(tk.Tk):
         self._build_layout()
         self._register_pages()
         self.show_page("secrets")
+        theme.set_zoom(self._ui_scale)  # 持久的用户缩放落到命名字体上
+        self.bind_all("<Control-MouseWheel>", self._on_zoom_wheel)
+        self.bind_all("<Control-equal>", lambda e: self._zoom_by(0.05))
+        self.bind_all("<Control-minus>", lambda e: self._zoom_by(-0.05))
         self.after(50, self._drain_queue)
+
+    def _on_zoom_wheel(self, event: tk.Event) -> None:
+        self._zoom_by(0.05 if event.delta > 0 else -0.05)
+
+    def _zoom_by(self, delta: float) -> None:
+        zoom = theme.set_zoom(theme.ZOOM + delta)
+        store = self.store
+        if store is not None:
+            try:
+                store.set_setting("ui_scale", str(zoom))
+            except Exception:
+                pass  # 缩放不因写库失败而中断
+        self.set_status(f"界面缩放 {round(zoom * 100)}%（Ctrl+滚轮调整，自动保存）")
 
     def _build_layout(self) -> None:
         # 状态栏必须先 pack——后 pack 的 expand 内容区会把它挤出窗口
@@ -210,10 +237,13 @@ class App(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _drain_queue(self) -> None:
-        while not self._queue.empty():
-            fn, args, kwargs = self._queue.get_nowait()
-            fn(*args, **kwargs)
-        self.after(50, self._drain_queue)
+        try:
+            while not self._queue.empty():
+                fn, args, kwargs = self._queue.get_nowait()
+                fn(*args, **kwargs)
+            self.after(50, self._drain_queue)
+        except tk.TclError:
+            pass  # 窗口已销毁，排队回调随窗口终止
 
     def _default_error(self, exc: Exception) -> None:
         from kv import errors

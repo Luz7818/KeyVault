@@ -13,7 +13,6 @@ from typing import Callable
 
 from kv.gui import motion, theme
 
-
 def _round_points(x0: int, y0: int, x1: int, y1: int, r: int) -> list[tuple[float, float]]:
     """圆角矩形的 polygon 顶点（smooth=True 渲染成圆角）。"""
     r = min(r, (x1 - x0) // 2, (y1 - y0) // 2)
@@ -66,6 +65,21 @@ class RoundButton(tk.Canvas):
         self.bind("<Leave>", lambda e: self._leave())
         self.bind("<Button-1>", self._on_down)
         self.bind("<ButtonRelease-1>", self._on_up)
+        theme.LISTENERS.append(self._on_font_changed)
+
+    def _on_font_changed(self) -> None:
+        """命名字体缩放后重测宽度、按新控件高重设，文字不溢出。"""
+        measure = tkfont.Font(font=self._font).measure(self._text)
+        self.configure(
+            width=max(measure + theme.PAD_LG - theme.PAD, theme.CONTROL_HEIGHT),
+            height=theme.CONTROL_HEIGHT,
+        )
+        self._draw()
+
+    def destroy(self) -> None:
+        if self._on_font_changed in theme.LISTENERS:
+            theme.LISTENERS.remove(self._on_font_changed)
+        super().destroy()
 
     def set_text(self, text: str) -> None:
         self._text = text
@@ -157,7 +171,7 @@ class Card(tk.Canvas):
         w, h = self.winfo_width(), self.winfo_height()
         if w < 4 or h < 4:
             return
-        points = _round_points(1, 1, w - 2, h - 2, self._radius)
+        points = _round_points(1, 1, w - 2, h - 2, theme.RADIUS)
         self.create_polygon(
             *points, fill=theme.SURFACE, outline=theme.BORDER_STRONG,
             width=1, smooth=True,
@@ -170,9 +184,8 @@ class RoundEntry(tk.Canvas):
 
     def __init__(self, parent: tk.Widget, *, textvariable=None, show: str = "",
                  width: int = 200, font=None) -> None:
-        height = theme.CONTROL_HEIGHT
         super().__init__(
-            parent, width=width, height=height,
+            parent, width=width, height=theme.CONTROL_HEIGHT,
             bg=theme.SURFACE, highlightthickness=0, bd=0,
         )
         self._font = font or theme.FONT
@@ -184,13 +197,29 @@ class RoundEntry(tk.Canvas):
             relief="flat", bd=0, insertbackground=theme.TEXT,
             highlightthickness=0,
         )
-        padx = theme.PAD_SM + 2
-        # 上下各留 2px 露出圆角描边——Entry 全高会把描边上下边盖掉
-        self.entry.place(x=padx, y=2, relwidth=1.0, width=-2 * padx, relheight=1.0, height=-4)
+        self._place_entry()
         self.entry.bind("<FocusIn>", lambda e: self._set_focus(True))
         self.entry.bind("<FocusOut>", lambda e: self._set_focus(False))
         self.bind("<Configure>", lambda _e: self._draw())
         self._draw()
+        theme.LISTENERS.append(self._on_font_changed)
+
+    def _place_entry(self) -> None:
+        padx = theme.PAD_SM + 2
+        # 上下各留 2px 露出圆角描边——Entry 全高会把描边上下边盖掉
+        self.entry.place(
+            x=padx, y=2, relwidth=1.0, width=-2 * padx, relheight=1.0, height=-4,
+        )
+
+    def _on_font_changed(self) -> None:
+        self.configure(height=theme.CONTROL_HEIGHT)
+        self._place_entry()
+        self._draw()
+
+    def destroy(self) -> None:
+        if self._on_font_changed in theme.LISTENERS:
+            theme.LISTENERS.remove(self._on_font_changed)
+        super().destroy()
 
     def _set_focus(self, on: bool) -> None:
         self._focused = on
@@ -233,7 +262,12 @@ class TabBar(ttk.Frame):
         self._body = tk.Frame(self, bg=theme.SURFACE)
         self._body.pack(fill="both", expand=True)
         self._strip.bind("<Configure>", lambda _e: self._relayout())
+        theme.LISTENERS.append(self._relayout)
 
+    def destroy(self) -> None:
+        if self._relayout in theme.LISTENERS:
+            theme.LISTENERS.remove(self._relayout)
+        super().destroy()
     def add(self, key: str, label: str) -> tk.Frame:
         """注册一个标签，返回它的内容层（已带内边距，直接 pack 内容）。"""
         outer = tk.Frame(self._body, bg=theme.SURFACE)
@@ -275,6 +309,7 @@ class TabBar(ttk.Frame):
 
     def _relayout(self) -> None:
         """按文字测量重排 pill 与 hitbox。重排会清掉画布，全部重画。"""
+        self._strip.configure(height=theme.CONTROL_HEIGHT)
         self._strip.delete("all")
         self._pill = None
         font = tkfont.Font(font=theme.FONT)

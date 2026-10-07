@@ -153,3 +153,18 @@
   `--distpath dist --workpath build`——产物路径 `dist/kv.exe` 不变。
 - 根 shim `kv.py`/`kv_gui.py` 按 §2.3 第 4 条（入口脚本留根）保留。
 - 验证：`python -I tests/runtests.py` 全量通过；`check_docs.py KeyVault` 阻断无、提醒无。
+
+## 2026-10-07 · 字体真自适应：Ctrl+滚轮即时缩放（字体+控件+行高全随动）
+
+- 用户反馈设置页未见到界面缩放（实为旧 exe）且要求「确实自适应」。本轮：
+  - 主题字体改为 tkinter **命名字体**（named font）——一处 configure(size)
+    全应用立即跟随，这是即时缩放的机制核心；
+  - `theme.set_zoom()`：字体 + 控件高/圆角 + Treeview 行高同步更新，
+    自绘组件经 `theme.LISTENERS` 注册回调（按钮重测宽度防溢出、输入框
+    重设高度、TabBar 重排 pill），destroy 时注销；
+  - 交互：**Ctrl+滚轮 / Ctrl+= / Ctrl+-** 即时缩放（0.85–1.60），状态栏
+    提示当前档位，自动写回设置表 `ui_scale`，下次启动保持；
+  - 窗口默认尺寸 clamp 到屏幕 88%/95%——1.25 档在 900p 屏上不再超界。
+- 设置页「界面缩放」下拉与 Ctrl+滚轮写同一配置，两路并存。
+- 验证：1.0/1.25 双档截图（批量操作页对比，按钮/输入框/文字等比放大
+  无破版）；全量 548 条 `OK (skipped=2)`；新 exe 打包通过。

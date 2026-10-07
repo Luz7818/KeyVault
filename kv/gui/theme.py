@@ -11,6 +11,7 @@ setup_style() 把 ttk 基底切到 clam（Windows 默认 vista 不吃颜色配�
 from __future__ import annotations
 
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk
 
 # ---------------------------------------------------------------- 色板
@@ -109,16 +110,65 @@ def _s(px: int) -> int:
     return max(round(px * SCALE), 1)
 
 
+# 命名字体：所有控件引用这些实例，configure(size=...) 即全应用即时生效——
+# 这是「字体自适应」的机制核心。setup_style() 时创建（需要 Tk 实例）。
+_FONTS: dict[str, tkfont.Font] = {}
+LISTENERS: list[Callable[[], None]] = []  # 自绘组件注册的重绘回调
+ZOOM = 1.0
+
+
+def set_zoom(zoom: float) -> float:
+    """运行中缩放（Ctrl+滚轮 / Ctrl+= / Ctrl+-）：字体即时变，控件高度/圆角
+    与表格行高同步更新。返回收敛后的 zoom。"""
+    global ZOOM, ROW_HEIGHT, CONTROL_HEIGHT, RADIUS
+    ZOOM = max(0.85, min(round(zoom, 2), 1.6))
+    ROW_HEIGHT = _f(44)
+    CONTROL_HEIGHT = _f(42)
+    RADIUS = _f(11)
+    if _FONTS:
+        _FONTS["body"].configure(size=-_f(_BODY_PX))
+        _FONTS["bold"].configure(size=-_f(_BODY_PX))
+        _FONTS["heading"].configure(size=-_f(_HEADING_PX))
+        _FONTS["small"].configure(size=-_f(_SMALL_PX))
+        _FONTS["mono"].configure(size=-_f(_MONO_PX))
+        ttk.Style().configure("Treeview", rowheight=ROW_HEIGHT)
+    for notify in LISTENERS:
+        notify()
+    return ZOOM
+
+
+def _f(base: int) -> int:
+    """含运行时 zoom 的像素字号。"""
+    return max(round(base * SCALE * ZOOM), 9)
+
+
 def _resolve_mono_family() -> None:
     """Cascadia Mono 存在就用它（更现代的等宽），否则退回 Consolas。"""
     global MONO_FAMILY
-    import tkinter.font as tkfont
 
     families = set(tkfont.families())
     for candidate in ("Cascadia Mono", "Cascadia Code"):
         if candidate in families:
             MONO_FAMILY = candidate
             return
+
+
+def _build_fonts() -> None:
+    """创建命名字体并让模块常量指向实例（ttk/tk 都吃 Font 对象）。"""
+    global FONT, FONT_BOLD, FONT_HEADING, FONT_SUBTITLE, FONT_SMALL
+    global FONT_TABLE, FONT_MONO
+    _FONTS["body"] = tkfont.Font(family=FONT_FAMILY, size=-_s(_BODY_PX))
+    _FONTS["bold"] = tkfont.Font(family=FONT_FAMILY, size=-_s(_BODY_PX), weight="bold")
+    _FONTS["heading"] = tkfont.Font(family=FONT_FAMILY, size=-_s(_HEADING_PX), weight="bold")
+    _FONTS["small"] = tkfont.Font(family=FONT_FAMILY, size=-_s(_SMALL_PX))
+    _FONTS["mono"] = tkfont.Font(family=MONO_FAMILY, size=-_s(_MONO_PX))
+    FONT = _FONTS["body"]
+    FONT_BOLD = _FONTS["bold"]
+    FONT_HEADING = _FONTS["heading"]
+    FONT_SUBTITLE = _FONTS["small"]
+    FONT_SMALL = _FONTS["small"]
+    FONT_TABLE = _FONTS["body"]
+    FONT_MONO = _FONTS["mono"]
 
 
 def flat(widget: tk.Widget) -> None:
@@ -134,9 +184,8 @@ def flat(widget: tk.Widget) -> None:
 
 def setup_style() -> None:
     """切到 clam 基底并按令牌注册全部组件样式。进 GUI 先调这个。"""
-    global FONT_MONO
     _resolve_mono_family()
-    FONT_MONO = (MONO_FAMILY, -_s(_MONO_PX))
+    _build_fonts()
     style = ttk.Style()
     try:
         style.theme_use("clam")
