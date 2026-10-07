@@ -71,6 +71,8 @@ STATUS_HEIGHT = 34
 ROW_HEIGHT = 44
 CONTROL_HEIGHT = 42
 RADIUS = 11
+BTN_PAD_X = 16   # 按钮文字到左右边的内边距
+BTN_PAD_Y = 12   # 按钮文字到上下边的内边距
 
 # 像素字号基线（scale=1 时），init() 按显示器放大
 _BODY_PX = 17
@@ -120,11 +122,13 @@ ZOOM = 1.0
 def set_zoom(zoom: float) -> float:
     """运行中缩放（Ctrl+滚轮 / Ctrl+= / Ctrl+-）：字体即时变，控件高度/圆角
     与表格行高同步更新。返回收敛后的 zoom。"""
-    global ZOOM, ROW_HEIGHT, CONTROL_HEIGHT, RADIUS
+    global ZOOM, ROW_HEIGHT, CONTROL_HEIGHT, RADIUS, BTN_PAD_X, BTN_PAD_Y
     ZOOM = max(0.85, min(round(zoom, 2), 1.6))
     ROW_HEIGHT = _f(44)
     CONTROL_HEIGHT = _f(42)
     RADIUS = _f(11)
+    BTN_PAD_X = _f(16)
+    BTN_PAD_Y = _f(12)
     if _FONTS:
         _FONTS["body"].configure(size=-_f(_BODY_PX))
         _FONTS["bold"].configure(size=-_f(_BODY_PX))

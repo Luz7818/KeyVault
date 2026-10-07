@@ -184,6 +184,10 @@ class App(tk.Tk):
             self._recolor_icon(
                 k, theme.SIDEBAR_ACTIVE_FG if active else theme.SIDEBAR_FG,
             )
+            # 图标画布底色跟按钮一起染色，高亮块才是完整的一行
+            self._nav_icons[k][0].config(
+                bg=theme.SIDEBAR_ACTIVE_BG if active else theme.SIDEBAR_BG,
+            )
         self._move_indicator(self._nav_buttons[key])
         for k, page in self._pages.items():
             if k == key:

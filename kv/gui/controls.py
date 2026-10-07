@@ -53,9 +53,9 @@ class RoundButton(tk.Canvas):
         self._job: str | None = None
         self._gen = 0
 
-        measure = tkfont.Font(font=self._font).measure(text)
-        width = max(measure + theme.PAD_LG - theme.PAD, theme.CONTROL_HEIGHT)
-        height = theme.CONTROL_HEIGHT
+        f = tkfont.Font(font=self._font)
+        width = max(f.measure(text) + 2 * theme.BTN_PAD_X, theme.CONTROL_HEIGHT)
+        height = max(theme.CONTROL_HEIGHT, f.metrics("linespace") + 2 * theme.BTN_PAD_Y)
         super().__init__(
             parent, width=width, height=height,
             bg=theme.SURFACE, highlightthickness=0, bd=0, cursor="hand2",
@@ -67,13 +67,18 @@ class RoundButton(tk.Canvas):
         self.bind("<ButtonRelease-1>", self._on_up)
         theme.LISTENERS.append(self._on_font_changed)
 
+    def _measure_size(self) -> None:
+        """按钮尺寸 = 文字 + 独立内边距；高度至少 CONTROL_HEIGHT，够放文字。"""
+        f = tkfont.Font(font=self._font)
+        measure = f.measure(self._text)
+        linespace = f.metrics("linespace")
+        width = max(measure + 2 * theme.BTN_PAD_X, theme.CONTROL_HEIGHT)
+        height = max(theme.CONTROL_HEIGHT, linespace + 2 * theme.BTN_PAD_Y)
+        self.configure(width=width, height=height)
+
     def _on_font_changed(self) -> None:
-        """命名字体缩放后重测宽度、按新控件高重设，文字不溢出。"""
-        measure = tkfont.Font(font=self._font).measure(self._text)
-        self.configure(
-            width=max(measure + theme.PAD_LG - theme.PAD, theme.CONTROL_HEIGHT),
-            height=theme.CONTROL_HEIGHT,
-        )
+        """命名字体缩放后重测宽高并重绘，文字不贴边不溢出。"""
+        self._measure_size()
         self._draw()
 
     def destroy(self) -> None:
@@ -205,7 +210,7 @@ class RoundEntry(tk.Canvas):
         theme.LISTENERS.append(self._on_font_changed)
 
     def _place_entry(self) -> None:
-        padx = theme.PAD_SM + 2
+        padx = theme.BTN_PAD_X - 2
         # 上下各留 2px 露出圆角描边——Entry 全高会把描边上下边盖掉
         self.entry.place(
             x=padx, y=2, relwidth=1.0, width=-2 * padx, relheight=1.0, height=-4,
@@ -316,7 +321,7 @@ class TabBar(ttk.Frame):
         x = 0.0
         for key in self._order:
             item = self._items[key]
-            w = font.measure(item["label"]) + theme.PAD_LG - theme.PAD
+            w = font.measure(item["label"]) + 2 * theme.BTN_PAD_X
             item["x"], item["w"] = round(x), round(w)
             hit = self._strip.create_rectangle(
                 x, 0, x + w, theme.CONTROL_HEIGHT, fill="", outline="", tags=(f"hit-{key}",),
