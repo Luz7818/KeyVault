@@ -73,3 +73,14 @@ kv.py / kv_gui.py（shim）
 - `kv scan` 对每个文件遍历全部指纹，万级以上密钥规模未做过性能测试（`TODO.md` 任务 2）。
 - Windows-only：DPAPI 绑定当前用户，无跨平台与多用户共享路径，这是有意取舍不是欠账。
 - 无 lint、无 CI：stdlib 零依赖约束下的选择，门禁是 unittest 全量 + `selftest --golden`。
+
+## 备份格式（2026-10-07，随批1 落地）
+
+`.kvb` = `KVBK1\n` + salt(16) + nonce(16) + ct + HMAC-SHA256 tag(32)。
+明文是 JSON（version/exported_at/records[]），**value 以 base64 存明文**，
+不是 DPAPI 密文——blob 换机/重装即解不开，备份密文等于备份废铁。
+口令是唯一防线：scrypt(n=2^15, r=8, p=1, dklen=64, maxmem 64MB) 派生
+enc_key(32) + mac_key(32)；流加密 SHA256(key||nonce||counter)（nonce 16B
+随机保证唯一）；encrypt-then-MAC。stdlib 无 AES，此组合（scrypt + HMAC
++ SHA256-CTR）是不引入依赖下防御充分的选择；若未来允许依赖，首选
+AES-GCM 平移。恢复走 saveops.commit 正常入库（去重 + 审计链复用）。

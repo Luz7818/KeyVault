@@ -54,7 +54,31 @@ class App(tk.Tk):
         self.bind_all("<Control-MouseWheel>", self._on_zoom_wheel)
         self.bind_all("<Control-equal>", lambda e: self._zoom_by(0.05))
         self.bind_all("<Control-minus>", lambda e: self._zoom_by(-0.05))
+        self.bind_all("<Control-k>", lambda e: self._open_palette())
         self.after(50, self._drain_queue)
+
+    def _open_palette(self) -> None:
+        from kv.gui.palette import open_palette
+
+        open_palette(self)
+
+    def copy_secret_by_name(self, name: str) -> bool:
+        """复制一条密钥到剪贴板（命令面板与密钥页共用）。"""
+        from kv.capture.clipboard import Win32Clipboard
+        from kv.capture.wipe import copy_secret
+
+        store = self.store
+        if store is None:
+            return False
+        try:
+            result = copy_secret(store, name, Win32Clipboard(), ttl=30, actor="gui")
+        except Exception as exc:
+            self.set_status(f"复制失败：{exc}", color=theme.ERROR)
+            return False
+        self.set_status(
+            f"已复制 {result.name}，{result.ttl:.0f} 秒后自动擦除", color=theme.SUCCESS,
+        )
+        return True
 
     def _on_zoom_wheel(self, event: tk.Event) -> None:
         self._zoom_by(0.05 if event.delta > 0 else -0.05)

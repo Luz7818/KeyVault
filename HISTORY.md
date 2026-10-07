@@ -235,3 +235,13 @@
   脱敏表补 BackupError/BackupAuthError 两行（test_arch 门禁要求）。
 - 验证：全量 557 条 `OK (skipped=2)`；截图目检备份 tab/未初始化空态/
   空库空态；`Ran 557` 口径同步 README/AGENTS。
+
+## 2026-10-07 · 批2：Ctrl+K 命令面板
+
+- 新增 `kv/gui/palette.py`：无边框命令面板——输入即过滤（前缀 > 包含 >
+  子序列三档打分，短名优先），↑↓ 选择、Enter 执行、Esc/失焦关闭。
+- 动作：回车把选中密钥复制到剪贴板（30s 自动擦除），复制逻辑收敛到
+  `app.copy_secret_by_name`（密钥页右键菜单同款，消除重复实现）。
+- 全局 `Ctrl+K` 唤起；vault 未初始化时面板内给出提示。
+- 验证：演示 vault 全链路（过滤 → Enter → 剪贴板明文比对一致）；全量
+  557 条 `OK (skipped=2)`。

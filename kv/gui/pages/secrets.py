@@ -296,20 +296,7 @@ class SecretsPage(ttk.Frame):
     def _on_copy(self, name: str) -> None:
         if not name:
             return
-        from kv.capture.clipboard import Win32Clipboard
-        from kv.capture.wipe import copy_secret
-
-        store = self._app.store
-        if store is None:
-            return
-        try:
-            result = copy_secret(store, name, Win32Clipboard(), ttl=30, actor="gui")
-        except Exception as exc:
-            messagebox.showerror("复制失败", str(exc), parent=self)
-            return
-        self._app.set_status(
-            f"已复制 {result.name}，{result.ttl:.0f} 秒后自动擦除", color=theme.SUCCESS,
-        )
+        self._app.copy_secret_by_name(name)
 
     def _on_rotate(self, name: str) -> None:
         if not name:
