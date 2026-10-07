@@ -191,3 +191,16 @@
   60 行预算拦截后重构）。
 - 验证：侧边栏截图目检（含放大裁片）；全量 548 条 `OK (skipped=2)`；
   新 exe 打包通过。
+
+## 2026-10-07 · 应用图标：品牌盾徽替代默认羽毛
+
+- 用户反馈窗口/任务栏还是 tkinter 默认羽毛图标、exe 文件图标为空白。
+- 新增 `packaging/make_icon.py`：把矢量盾徽（与 GUI 内 logo 同源形状）
+  光栅化为 256px PNG——纯 stdlib 手写 PNG 编码与 PNG-in-ICO 容器
+  （超采样抗锯齿、纵向渐变、白色钥匙孔），产物 `packaging/icon.png`
+  与 `icon.ico` 入库随仓走。
+- `kv.spec`：EXE 嵌入 `icon.ico`（资源管理器里的 exe 图标），datas 带上
+  `icon.png`；新增 `kv/gui/icon.py` 用 `iconphoto` 设置标题栏/任务栏图标
+  （开发态找仓库、打包态找 _MEIPASS，缺失静默跳过）。
+- 验证：标题栏截图确认盾徽生效；程序断言 photo 绑定；全量 548 条
+  `OK (skipped=2)`；新 exe 打包通过。

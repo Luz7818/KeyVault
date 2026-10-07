@@ -9,6 +9,7 @@ from tkinter import ttk
 from typing import Any, Callable
 
 from kv.gui import icons, motion, theme
+from kv.gui.icon import apply as apply_app_icon
 from kv.gui.widgets import StatusLabel
 
 NAV_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
@@ -28,6 +29,7 @@ class App(tk.Tk):
         self._ui_scale = max(0.8, min(ui_scale, 1.6))
         total = scale * self._ui_scale
         self.title("KeyVault")
+        apply_app_icon(self)
         # 缩放档位再大也不能超出屏幕——窗口默认取「理想尺寸」与屏幕 90% 的较小值
         screen_w, screen_h = self.winfo_screenwidth(), self.winfo_screenheight()
         want_w, want_h = round(1180 * total), round(780 * total)

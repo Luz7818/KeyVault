@@ -9,7 +9,7 @@ a = Analysis(
     ['../kv_gui.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('icon.png', 'packaging')],
     hiddenimports=[
         'kv.gui.pages.secrets',
         'kv.gui.pages.detect',
@@ -34,6 +34,7 @@ exe = EXE(
     a.datas,
     [],
     name='kv',
+    icon='icon.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
