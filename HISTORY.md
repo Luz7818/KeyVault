@@ -204,3 +204,14 @@
   （开发态找仓库、打包态找 _MEIPASS，缺失静默跳过）。
 - 验证：标题栏截图确认盾徽生效；程序断言 photo 绑定；全量 548 条
   `OK (skipped=2)`；新 exe 打包通过。
+
+## 2026-10-07 · 修复 build.bat 双击无效（编码不匹配）
+
+- 用户双击 packaging\build.bat 后不产生新 exe。根因：bat 是 UTF-8 编码，
+  中文 Windows 的 cmd 默认按 GBK 解析批处理——中文注释被读成乱码"命令"，
+  脚本从注释行开始整体错位，python 命令根本没执行。
+- 修复：bat 首行加 `chcp 65001 >nul`（与文件 UTF-8 编码一致），顺带把
+  PyInstaller 安装步骤改为「已装则跳过」，打包失败提示里点明最常见原因
+  （dist\kv.exe 正在运行）。
+- 验证：cmd 模拟双击完整跑通（中文输出正常、打包成功）；用
+  ExtractAssociatedIcon 提取 dist\kv.exe 关联图标确认盾徽已嵌入 exe 资源。
