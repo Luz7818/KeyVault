@@ -26,6 +26,7 @@ class SecretsPage(ttk.Frame):
         self._header = PageHeader(self, "密钥管理", "存取、轮换、审计——所有数据不出本机")
         self._header.pack(anchor="w", pady=(0, theme.GAP))
         self._build_toolbar()
+        self._build_empty_state()
         card = Card(self)
         card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._table = DataTable(
@@ -34,11 +35,34 @@ class SecretsPage(ttk.Frame):
             on_right_click=self._on_right_click,
         )
         for status, color in (
-            ("active", theme.SUCCESS), ("revoked", theme.ERROR), ("expired", theme.WARNING),
+            ("active", theme.SUCCESS), ("revoked", theme.ERROR),
+            ("expired", theme.WARNING), ("expiring", "#b45309"),
         ):
             self._table.tree.tag_configure(f"st-{status}", foreground=color)
         self._table.pack(fill="both", expand=True, padx=1, pady=1)
         self._build_menu()
+
+    def _build_empty_state(self) -> None:
+        """空态引导卡：未初始化 → 一键建库；空库 → 添加或去捕获。"""
+        self._empty = Card(self)
+        body = self._empty.body
+        self._empty_title = tk.Label(
+            body, text="", font=theme.FONT_HEADING, bg=theme.SURFACE, fg=theme.TEXT,
+        )
+        self._empty_title.pack(anchor="w", padx=theme.PAD, pady=(theme.PAD_LG, 0))
+        self._empty_hint = tk.Label(
+            body, text="", font=theme.FONT, bg=theme.SURFACE,
+            fg=theme.TEXT_SECONDARY, justify="left",
+        )
+        self._empty_hint.pack(anchor="w", padx=theme.PAD, pady=(theme.PAD_SM, 0))
+        row = tk.Frame(body, bg=theme.SURFACE)
+        row.pack(anchor="w", padx=theme.PAD, pady=theme.PAD)
+        self._empty_btn1 = RoundButton(row, "", self._on_add, kind="accent")
+        self._empty_btn1.pack(side="left")
+        self._empty_btn2 = RoundButton(row, "", lambda: self._app.show_page("capture"))
+        self._empty_btn2.pack(side="left", padx=(theme.GAP, 0))
+        self._empty_btn3 = RoundButton(row, "", lambda: self._app.show_page("settings"))
+        self._empty_btn3.pack(side="left", padx=(theme.GAP, 0))
 
     def _build_toolbar(self) -> None:
         bar = ttk.Frame(self)
@@ -84,8 +108,8 @@ class SecretsPage(ttk.Frame):
 
     def refresh(self) -> None:
         store = self._app.store
-        self._table.clear()
         if store is None:
+            self._show_empty("uninitialized")
             self._app.set_status("vault 未初始化", color=theme.WARNING)
             return
         query = self._search.get().strip()
@@ -96,13 +120,67 @@ class SecretsPage(ttk.Frame):
         if status:
             filters["status"] = status
         self._rows = store.list_secrets(**filters)
+        if not self._rows and not query and not status:
+            self._show_empty("empty")
+            self._app.set_status("0 条记录")
+            return
+        self._show_table()
+        from kv.ops.health import health_report
+
+        expiring = set(health_report(store).expiring)
         for row in self._rows:
             created = (row.created_at or "")[:16].replace("T", " ")
+            if row.status == "expired":
+                tag = "st-expired"
+            elif row.status == "active" and row.name in expiring:
+                tag = "st-expiring"   # 30 天内到期：整行橙色提醒
+            else:
+                tag = f"st-{row.status}"
             self._table.insert_row((
                 row.name, row.platform, row.status,
                 row.preview("*"), created,
-            ), tags=(f"st-{row.status}",))
+            ), tags=(tag,))
         self._app.set_status(f"{len(self._rows)} 条记录")
+
+    def _show_empty(self, mode: str) -> None:
+        """空态引导：mode = uninitialized / empty。"""
+        texts = {
+            "uninitialized": (
+                "还没有创建密钥库",
+                "密钥库用 Windows DPAPI 加密，只属于当前 Windows 账户，数据不出本机。",
+                "初始化 Vault", "看看设置页", "了解捕获",
+            ),
+            "empty": (
+                "库里还没有密钥",
+                "手动添加一条，或开启剪贴板监控——复制到密钥时会自动识别并进入审批队列。",
+                "添加密钥", "去设置页", "开启捕获",
+            ),
+        }
+        title, hint, b1, b2, b3 = texts[mode]
+        self._empty_title.config(text=title)
+        self._empty_hint.config(text=hint)
+        self._empty_btn1.set_text(b1)
+        self._empty_btn2.set_text(b2)
+        self._empty_btn3.set_text(b3)
+        if mode == "uninitialized":
+            self._empty_btn1.set_command(self._app.initialize_vault)
+            self._empty_btn2.set_command(lambda: self._app.show_page("settings"))
+            self._empty_btn3.set_command(self._go_capture)
+        else:
+            self._empty_btn1.set_command(self._on_add)
+            self._empty_btn2.set_command(lambda: self._app.show_page("settings"))
+            self._empty_btn3.set_command(self._go_capture)
+        self._empty.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        # 隐藏表格所在的父容器（Card）：pack_forget 只对顶层 pack 生效
+        self._table.master.master.pack_forget()
+
+    def _go_capture(self) -> None:
+        self._app.show_page("capture")
+
+    def _show_table(self) -> None:
+        if not self._table.master.master.winfo_manager():
+            self._table.master.master.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        self._empty.pack_forget()
 
     def _on_add(self) -> None:
         fields = [

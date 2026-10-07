@@ -297,3 +297,29 @@ class App(tk.Tk):
 
     def refresh_store(self) -> None:
         self._store = self._try_open_store()
+
+    def initialize_vault(self) -> bool:
+        """公共初始化流程（设置页与空态引导共用）：建库 + 刷新。失败弹窗。"""
+        from tkinter import messagebox
+
+        from kv.core import db
+        from kv.crypto.dpapi import DpapiProtector
+        from kv.paths import vault_db
+
+        target = vault_db()
+        if db.is_initialized(target):
+            self.refresh_store()
+            return True
+        try:
+            protector = DpapiProtector()
+            db.initialize(
+                target,
+                canary_blob=protector.protect(b"kv-binding-canary"),
+                canary_text="kv-binding-canary",
+            )
+        except Exception as exc:
+            messagebox.showerror("初始化失败", str(exc), parent=self)
+            return False
+        self.refresh_store()
+        self.set_status(f"vault 已创建：{target}", color=theme.SUCCESS)
+        return True

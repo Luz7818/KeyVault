@@ -91,3 +91,15 @@ class RefusedError(KvError):
     """识别结果不可信（如裸 hex-32），拒绝落盘，除非 --force。"""
 
     exit_code = EXIT_USAGE
+
+
+class BackupError(KvError):
+    """备份文件格式不对（magic/长度/JSON 解析失败）。"""
+
+    exit_code = EXIT_USAGE
+
+
+class BackupAuthError(KvError):
+    """备份口令错误或文件被篡改（HMAC 校验失败）。"""
+
+    exit_code = EXIT_USAGE

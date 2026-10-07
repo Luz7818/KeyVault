@@ -108,28 +108,12 @@ class SettingsPage(ttk.Frame):
         self._build_settings()
 
     def _do_init(self) -> None:
-        from kv.core import db
-        from kv.crypto.dpapi import DpapiProtector
         from kv.paths import vault_db
 
-        target = vault_db()
-        if db.is_initialized(target):
-            messagebox.showinfo("已初始化", f"vault 已存在：{target}", parent=self)
+        if self._app.initialize_vault():
+            messagebox.showinfo("成功", f"vault 已创建：{vault_db()}", parent=self)
             self._app.refresh_store()
             self._refresh()
-            return
-        protector = DpapiProtector()
-        canary_text = "kv-binding-canary"
-        canary_blob = protector.protect(canary_text.encode("utf-8"))
-        try:
-            db.initialize(target, canary_blob=canary_blob, canary_text=canary_text)
-        except Exception as exc:
-            messagebox.showerror("初始化失败", str(exc), parent=self)
-            return
-        self._app.refresh_store()
-        self._refresh()
-        self._app.set_status(f"vault 已创建：{target}", color=theme.SUCCESS)
-        messagebox.showinfo("成功", f"vault 已创建：{target}", parent=self)
 
     def _do_doctor(self) -> None:
         store = self._app.store

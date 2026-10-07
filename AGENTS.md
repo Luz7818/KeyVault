@@ -91,13 +91,13 @@ stdlib 零依赖）；外科手术式改动（不动无关代码，每行改动�
 
 | 项 | 值 | 复核命令 |
 |---|---|---|
-| 测试 | `Ran 548, OK (skipped=2)`，0 失败（2026-10-05 实测） | `python -I -m unittest discover -s tests -t .` |
+| 测试 | `Ran 557, OK (skipped=2)`，0 失败（2026-10-07 实测） | `python -I -m unittest discover -s tests -t .` |
 | 金标自测 | `selftest --golden` 全过 | `python kv.py selftest --golden` |
 | 静态检查 | 无 lint 配置（有意） | — |
 | CI | 无 | — |
 | 运行时依赖 | 零（stdlib only） | — |
 | Python | 3.12+ | `python --version` |
-| 源文件 | 91 个 `.py` + 1 个 `.sql` | `find . -name "*.py" -not -path "*/__pycache__/*" \| wc -l` |
+| 源文件 | 96 个 `.py` + 1 个 `.sql` | `find . -name "*.py" -not -path "*/__pycache__/*" \| wc -l` |
 | 版本 | `0.1.0` / `SCHEMA_VERSION=1` | `python kv.py --version` |
 | 版本控制 | 2026-10-05 起 git 建档（main） | `git log --oneline` |
 

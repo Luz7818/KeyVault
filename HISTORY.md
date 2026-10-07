@@ -215,3 +215,23 @@
   （dist\kv.exe 正在运行）。
 - 验证：cmd 模拟双击完整跑通（中文输出正常、打包成功）；用
   ExtractAssociatedIcon 提取 dist\kv.exe 关联图标确认盾徽已嵌入 exe 资源。
+
+## 2026-10-07 · 批1 功能三件套：备份/恢复 + 健康提醒 + 空态引导
+
+- **备份/恢复（全新功能，CLI/GUI 一起补）**：侦察发现 `kv export` 只是 init
+  的引导文案，从未实现。新增 `kv/ops/backup.py`——口令加密的全量明文导出
+  （.kvb）：格式 `KVBK1|salt16|nonce16|ct|tag32`，scrypt(n=2^15,maxmem 64MB)
+  派生 64B（前 32 流加密 SHA256-CTR / 后 32 HMAC 认证，encrypt-then-MAC）。
+  存明文口令加密而非 DPAPI 密文：blob 换机即废，备份密文等于备份废铁；
+  口令是唯一防线（≥8 位强制，GUI 双确认）。恢复走 saveops.commit 正常入库
+  （去重/审计链复用），错口令/篡改 → BackupAuthError。CLI：kv export/restore
+  待批 2 补充命令挂载（本次 GUI 优先）。**ARCHITECTURE 待补格式决策**。
+- **健康报告**：`kv/ops/health.py`——30 天内到期（行高亮橙）/已过期计数/
+  180 天未轮换；security 页「健康报告」按钮 + secrets 表行着色（st-expiring）。
+- **空态引导**：vault 未初始化 → secrets 页大标题引导卡（一键初始化，公共
+  `app.initialize_vault()`，settings 页改调它）；空库 → 「添加密钥/设置/捕获」
+  三按钮引导。
+- 测试 +9（backup 往返/错口令/篡改/弱口令/二次恢复去重、health 三分支），
+  脱敏表补 BackupError/BackupAuthError 两行（test_arch 门禁要求）。
+- 验证：全量 557 条 `OK (skipped=2)`；截图目检备份 tab/未初始化空态/
+  空库空态；`Ran 557` 口径同步 README/AGENTS。

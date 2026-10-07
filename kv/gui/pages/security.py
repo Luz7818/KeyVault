@@ -30,13 +30,16 @@ class SecurityPage(ttk.Frame):
             anchor="w", pady=(0, theme.GAP),
         )
         nb = TabBar(self)
+        self._nb = nb
         nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._scan_tab = nb.add("scan", "泄露扫描")
         self._audit_tab = nb.add("audit", "审计日志")
         self._maint_tab = nb.add("maint", "过期 / 清除")
+        self._backup_tab = nb.add("backup", "备份 / 恢复")
         self._build_scan()
         self._build_audit()
         self._build_maint()
+        self._build_backup()
 
     def _build_scan(self) -> None:
         bar = ttk.Frame(self._scan_tab)
@@ -70,7 +73,8 @@ class SecurityPage(ttk.Frame):
         exp = ttk.LabelFrame(self._maint_tab, text="过期检查", padding=theme.PAD)
         exp.pack(fill="x")
         RoundButton(exp, "标记过期记录", self._do_expire).pack(side="left")
-        self._expire_label = ttk.Label(exp, text="", font=theme.FONT_SMALL)
+        RoundButton(exp, "健康报告", self._do_health).pack(side="left", padx=theme.GAP)
+        self._expire_label = ttk.Label(exp, text="", font=theme.FONT_SMALL, wraplength=640)
         self._expire_label.pack(side="left", padx=theme.PAD)
         pur = ttk.LabelFrame(self._maint_tab, text="清除", padding=theme.PAD)
         pur.pack(fill="x", pady=(theme.PAD, 0))
@@ -81,6 +85,47 @@ class SecurityPage(ttk.Frame):
         btn_bar.pack(fill="x", pady=(theme.GAP, 0))
         RoundButton(btn_bar, "预览（dry-run）", lambda: self._do_purge(dry=True)).pack(side="left")
         RoundButton(btn_bar, "执行清除", lambda: self._do_purge(dry=False), kind="danger").pack(side="left", padx=theme.GAP)
+
+    def _build_backup(self) -> None:
+        ttk.Label(
+            self._backup_tab, style="Sub.TLabel",
+            text="备份是口令加密的明文导出（.kvb），可在任何 Windows 机器恢复——"
+                 "DPAPI 绑定本机，重装系统后本库无法解密，备份是唯一出路。"
+                 "口令是唯一凭据：丢失无法恢复，弱口令等于没加密。",
+            wraplength=720, justify="left",
+        ).pack(anchor="w", pady=(0, theme.GAP))
+        exp = ttk.LabelFrame(self._backup_tab, text="导出备份", padding=theme.PAD)
+        exp.pack(fill="x")
+        pw_row = ttk.Frame(exp)
+        pw_row.pack(fill="x")
+        ttk.Label(pw_row, text="口令", style="Sub.TLabel").pack(side="left")
+        self._bk_pw = tk.StringVar()
+        RoundEntry(pw_row, textvariable=self._bk_pw, width=200, show="*").pack(side="left", padx=(theme.GAP, theme.GAP))
+        ttk.Label(pw_row, text="确认口令", style="Sub.TLabel").pack(side="left")
+        self._bk_pw2 = tk.StringVar()
+        RoundEntry(pw_row, textvariable=self._bk_pw2, width=200, show="*").pack(side="left", padx=theme.GAP)
+        path_row = ttk.Frame(exp)
+        path_row.pack(fill="x", pady=(theme.GAP, 0))
+        self._bk_path = tk.StringVar()
+        RoundEntry(path_row, textvariable=self._bk_path, width=480).pack(side="left", fill="x", expand=True)
+        RoundButton(path_row, "浏览", self._pick_backup_path).pack(side="left", padx=theme.GAP)
+        RoundButton(path_row, "导出备份", self._do_backup, kind="accent").pack(side="left")
+
+        res = ttk.LabelFrame(self._backup_tab, text="从备份恢复", padding=theme.PAD)
+        res.pack(fill="x", pady=(theme.PAD, 0))
+        res_row = ttk.Frame(res)
+        res_row.pack(fill="x")
+        self._rs_path = tk.StringVar()
+        RoundEntry(res_row, textvariable=self._rs_path, width=420).pack(side="left", fill="x", expand=True)
+        RoundButton(res_row, "浏览", self._pick_restore_path).pack(side="left", padx=theme.GAP)
+        ttk.Label(res_row, text="口令", style="Sub.TLabel").pack(side="left")
+        self._rs_pw = tk.StringVar()
+        RoundEntry(res_row, textvariable=self._rs_pw, width=180, show="*").pack(side="left", padx=(theme.GAP, theme.GAP))
+        RoundButton(res_row, "恢复", self._do_restore, kind="accent").pack(side="left")
+        ttk.Label(
+            res, style="Muted.TLabel",
+            text="恢复把备份里的记录合并进当前库：重名同值自动跳过，不会覆盖已有记录。",
+        ).pack(anchor="w", pady=(theme.GAP, 0))
 
     def _pick_dir(self) -> None:
         d = filedialog.askdirectory(parent=self, title="选择扫描目录")
@@ -148,6 +193,106 @@ class SecurityPage(ttk.Frame):
         result = expiryops.mark_expired(store)
         self._expire_label.config(text=f"标记了 {result.expired_count} 条")
         self._app.set_status(f"过期检查：{result.expired_count} 条", color=theme.SUCCESS)
+
+    def _do_health(self) -> None:
+        from kv.ops.health import health_report
+
+        store = self._app.store
+        if store is None:
+            return
+        report = health_report(store)
+        parts = []
+        if report.expired_count:
+            parts.append(f"已过期 {report.expired_count} 条")
+        if report.expiring:
+            parts.append(f"30 天内到期 {len(report.expiring)} 条（{'、'.join(report.expiring[:6])}）")
+        if report.stale:
+            parts.append(f"超过 180 天未轮换 {len(report.stale)} 条（{'、'.join(report.stale[:6])}）")
+        text = "；".join(parts) if parts else "一切正常：没有过期、临期或长期未轮换的记录"
+        self._expire_label.config(text=text)
+        self._app.set_status("健康检查完成", color=theme.SUCCESS)
+
+    def _pick_backup_path(self) -> None:
+        path = filedialog.asksaveasfilename(
+            parent=self, title="备份保存到",
+            defaultextension=".kvb", filetypes=[("KeyVault 备份", "*.kvb")],
+        )
+        if path:
+            self._bk_path.set(path)
+
+    def _pick_restore_path(self) -> None:
+        path = filedialog.askopenfilename(
+            parent=self, title="选择备份文件",
+            filetypes=[("KeyVault 备份", "*.kvb"), ("所有文件", "*.*")],
+        )
+        if path:
+            self._rs_path.set(path)
+
+    def _do_backup(self) -> None:
+        from pathlib import Path
+
+        from kv.ops import backup as backupops
+
+        store = self._app.store
+        if store is None:
+            return
+        pw, pw2 = self._bk_pw.get(), self._bk_pw2.get()
+        path = self._bk_path.get().strip()
+        if not path:
+            messagebox.showinfo("提示", "请选择备份保存位置。", parent=self)
+            return
+        if len(pw) < 8:
+            messagebox.showwarning("口令太短", "备份口令至少 8 位——它是唯一防线。", parent=self)
+            return
+        if pw != pw2:
+            messagebox.showwarning("不一致", "两次输入的口令不一致。", parent=self)
+            return
+        try:
+            result = backupops.export_backup(store, Path(path), pw)
+        except Exception as exc:
+            messagebox.showerror("备份失败", str(exc), parent=self)
+            return
+        finally:
+            self._bk_pw.set("")
+            self._bk_pw2.set("")
+        self._app.set_status(f"已备份 {result.count} 条", color=theme.SUCCESS)
+        messagebox.showinfo(
+            "备份完成", f"已加密导出 {result.count} 条到：\n{result.path}\n\n"
+            "口令丢失无法恢复，请把口令记在别处。",
+            parent=self,
+        )
+
+    def _do_restore(self) -> None:
+        from pathlib import Path
+
+        from kv.ops import backup as backupops
+
+        store = self._app.store
+        if store is None:
+            return
+        path, pw = self._rs_path.get().strip(), self._rs_pw.get()
+        if not path or not pw:
+            messagebox.showinfo("提示", "请选择备份文件并输入口令。", parent=self)
+            return
+        if not messagebox.askyesno(
+            "确认恢复", "恢复会把备份中的记录合并进当前库（重名同值跳过）。继续？",
+            parent=self,
+        ):
+            return
+        try:
+            result = backupops.restore_backup(store, Path(path), pw, actor="gui")
+        except Exception as exc:
+            messagebox.showerror("恢复失败", str(exc), parent=self)
+            return
+        finally:
+            self._rs_pw.set("")
+        self._app.set_status(
+            f"恢复完成：新建 {result.created}，跳过 {result.deduped}", color=theme.SUCCESS,
+        )
+        messagebox.showinfo(
+            "恢复完成", f"新建 {result.created} 条，重名同值跳过 {result.deduped} 条。",
+            parent=self,
+        )
 
     def _do_purge(self, *, dry: bool) -> None:
         from kv.ops import purge as purgeops

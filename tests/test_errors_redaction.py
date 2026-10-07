@@ -59,6 +59,8 @@ class TestErrorMessagesNeverLeak(unittest.TestCase):
         ("VaultNotInitializedError", lambda: errors.VaultNotInitializedError("C:/x/vault.db")),
         ("GateError", lambda: errors.GateError("检测表在上次 golden 之后变过")),
         ("RefusedError", lambda: errors.RefusedError(f"识别结果不可信（{errors.descriptor(SECRET_B)}）")),
+        ("BackupError", lambda: errors.BackupError("不是有效的 KeyVault 备份文件（.kvb）")),
+        ("BackupAuthError", lambda: errors.BackupAuthError("口令错误，或备份文件已被篡改")),
     ]
 
     def test_no_error_message_shares_8_chars_with_the_secret(self):

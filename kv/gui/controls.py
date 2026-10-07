@@ -90,6 +90,9 @@ class RoundButton(tk.Canvas):
         self._text = text
         self._draw()
 
+    def set_command(self, command: Callable[[], None]) -> None:
+        self._command = command
+
     def _draw(self) -> None:
         self.delete("all")
         w, h = self.winfo_reqwidth(), self.winfo_reqheight()

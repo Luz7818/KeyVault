@@ -22,6 +22,7 @@ class IngestPage(ttk.Frame):
             anchor="w", pady=(0, theme.GAP),
         )
         nb = TabBar(self)
+        self._nb = nb
         nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._import_tab = nb.add("import", "导入")
         self._inject_tab = nb.add("inject", "注入 .env")
