@@ -73,20 +73,40 @@ class App(tk.Tk):
         self._sidebar = tk.Frame(self, bg=theme.SIDEBAR_BG, width=theme.SIDEBAR_WIDTH)
         self._sidebar.pack(side="left", fill="y")
         self._sidebar.pack_propagate(False)
+        self._build_brand()
+        tk.Frame(self._sidebar, bg="#232a38", height=1).pack(fill="x", padx=theme.PAD)
+        nav = self._build_nav()
+        # 指示条：单实例，切换时弹簧滑到目标项旁边——比逐项变色更有"实体感"
+        self._indicator = tk.Frame(nav, bg=theme.SIDEBAR_INDICATOR, width=3, height=1)
+        self._indicator_y = motion.Spring(self, lambda y: self._place_indicator(y))
+        self._content = tk.Frame(self, bg=theme.SURFACE)
+        self._content.pack(side="left", fill="both", expand=True)
 
+    def _build_brand(self) -> None:
         brand = tk.Frame(self._sidebar, bg=theme.SIDEBAR_BG)
         brand.pack(fill="x", padx=theme.PAD, pady=(theme.PAD_LG, theme.PAD_LG - 4))
+        brand_row = tk.Frame(brand, bg=theme.SIDEBAR_BG)
+        brand_row.pack(anchor="w")
+        logo_size = round(30 * theme.SCALE)
+        logo = tk.Canvas(
+            brand_row, width=logo_size, height=logo_size,
+            bg=theme.SIDEBAR_BG, highlightthickness=0, bd=0,
+        )
+        logo.pack(side="left")
+        icons.draw_logo(
+            logo, logo_size / 2, logo_size / 2, logo_size,
+            "#ffffff", "#7c9bff",
+        )
         tk.Label(
-            brand, text="◆ KeyVault", font=theme.FONT_HEADING,
+            brand_row, text="KeyVault", font=theme.FONT_HEADING,
             bg=theme.SIDEBAR_BG, fg="#ffffff", anchor="w",
-        ).pack(anchor="w")
+        ).pack(side="left", padx=(theme.PAD_SM, 0))
         tk.Label(
             brand, text="本地密钥保管箱", font=theme.FONT_SUBTITLE,
             bg=theme.SIDEBAR_BG, fg=theme.SIDEBAR_MUTED, anchor="w",
         ).pack(anchor="w", pady=(2, 0))
 
-        tk.Frame(self._sidebar, bg="#232a38", height=1).pack(fill="x", padx=theme.PAD)
-
+    def _build_nav(self) -> tk.Frame:
         nav = tk.Frame(self._sidebar, bg=theme.SIDEBAR_BG)
         nav.pack(fill="x", pady=(theme.PAD_SM, 0))
         icon_size = round(18 * theme.SCALE)
@@ -117,12 +137,7 @@ class App(tk.Tk):
                 btn.bind("<Leave>", lambda e, b=btn: self._nav_tint(b, self._nav_rest_color(b)))
                 self._nav_buttons[key] = btn
                 self._nav_icons[key] = (icon, icon_size)
-
-        # 指示条：单实例，切换时弹簧滑到目标项旁边——比逐项变色更有"实体感"
-        self._indicator = tk.Frame(nav, bg=theme.SIDEBAR_INDICATOR, width=3, height=1)
-        self._indicator_y = motion.Spring(self, lambda y: self._place_indicator(y))
-        self._content = tk.Frame(self, bg=theme.SURFACE)
-        self._content.pack(side="left", fill="both", expand=True)
+        return nav
 
     def _recolor_icon(self, key: str, color: str) -> None:
         icon, size = self._nav_icons[key]
