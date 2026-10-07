@@ -316,7 +316,12 @@ class TabBar(ttk.Frame):
         self._repaint()
 
     def _relayout(self) -> None:
-        """按文字测量重排 pill 与 hitbox。重排会清掉画布，全部重画。"""
+        """按文字测量重排 hitbox/pill/文字。重排会清掉画布，全部重画。
+
+        层叠从底到顶固定为：hitbox（纸面色，可命中）→ pill → 文字。
+        hitbox 曾用 fill=""——透明区域不参与 Canvas 命中，点击会落空；
+        pill 曾不删旧项——残留色块既挡视线又挡点击。
+        """
         self._strip.configure(height=theme.CONTROL_HEIGHT)
         self._strip.delete("all")
         self._pill = None
@@ -326,14 +331,16 @@ class TabBar(ttk.Frame):
             item = self._items[key]
             w = font.measure(item["label"]) + 2 * theme.BTN_PAD_X
             item["x"], item["w"] = round(x), round(w)
-            hit = self._strip.create_rectangle(
-                x, 0, x + w, theme.CONTROL_HEIGHT, fill="", outline="", tags=(f"hit-{key}",),
+            tag = f"tab-{key}"
+            self._strip.create_rectangle(
+                x, 0, x + w, theme.CONTROL_HEIGHT,
+                fill=theme.SURFACE, outline="", tags=(tag,),
             )
             self._strip.create_text(
                 x + w / 2, theme.CONTROL_HEIGHT / 2, text=item["label"],
-                fill=theme.TEXT_SECONDARY, font=theme.FONT, tags=(f"label-{key}",),
+                fill=theme.TEXT_SECONDARY, font=theme.FONT, tags=(tag, f"label-{key}"),
             )
-            self._strip.tag_bind(hit, "<Button-1>", lambda e, k=key: self.select(k))
+            self._strip.tag_bind(tag, "<Button-1>", lambda e, k=key: self.select(k))
             x += w + theme.GAP
         if getattr(self, "_pill_placed", False):
             self._place_pill(self._items[self._current]["x"])
@@ -341,11 +348,16 @@ class TabBar(ttk.Frame):
             self.on_show_first()
 
     def _place_pill(self, x: int) -> None:
+        """选中底色块：先删旧再画，挂在当前 tab 的 tag 上保证可点击。"""
+        self._strip.delete("pill")
+        key = self._current
         self._pill = self._strip.create_rectangle(
-            x, 2, x + self._items[self._current]["w"], theme.CONTROL_HEIGHT - 4,
-            fill=theme.ACCENT_SOFT, outline="", tags=("pill",),
+            x, 2, x + self._items[key]["w"], theme.CONTROL_HEIGHT - 4,
+            fill=theme.ACCENT_SOFT, outline="", tags=("pill", f"tab-{key}"),
         )
-        self._strip.lower("pill")
+        self._strip.tag_raise("pill")
+        for k in self._order:  # 文字永远在 pill 之上
+            self._strip.tag_raise(f"label-{k}")
         self._repaint()
 
     def _repaint(self) -> None:

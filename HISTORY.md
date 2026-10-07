@@ -272,3 +272,16 @@
   数据（row/fps/history），拆到 `kv/gui/detail_window.py`
   （detail_rows / build_detail_window），secrets.py 回落 389 行。
 - 门禁 557 条 `OK (skipped=2)`，弹窗冒烟通过，新 exe 打包。
+
+## 2026-10-07 · 修复 TabBar 点击失灵与残留 pill（用户反馈标签无法切换）
+
+- 两个叠加的根因：
+  1. `_place_pill` 不删除旧 pill——每次切换叠加一个新色块，残留的旧 pill
+     既显示为「另一个选中态」又（不透明填充）拦截其覆盖区域的点击；
+  2. hitbox 用 `fill=""`——Tk Canvas 透明填充不参与命中判定，点击只能
+     落在 1px 描边线上，几乎必然落空。
+- 修复：pill 先删旧再画；hitbox 改纸面色（可命中、无视觉差）；点击绑定
+  挂到 hit/pill/文字共享的 `tab-<key>` tag；层叠固定为 hit → pill → 文字。
+- 验证：`find_closest` 命中项带正确 tag、点击后 current 切换、画布上
+  pill 恰好 1 个、RoundEntry 输入与 var 同步；全量 557 条 `OK (skipped=2)`；
+  新 exe 打包通过。
