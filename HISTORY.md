@@ -265,3 +265,10 @@
   尾注指向安全页审计日志。
 - `_fill_detail`（mono 文本版）移除，`_on_show` 只做取数。
 - 验证：弹窗截图目检（徽章/网格/滚动）；全量 557 条 `OK (skipped=2)`。
+
+## 2026-10-07 · 批4 补丁：详情弹窗拆独立模块（文件预算拦截）
+
+- secrets.py 472 行超出单文件 460 预算（test_arch 拦截）。详情弹窗只依赖
+  数据（row/fps/history），拆到 `kv/gui/detail_window.py`
+  （detail_rows / build_detail_window），secrets.py 回落 389 行。
+- 门禁 557 条 `OK (skipped=2)`，弹窗冒烟通过，新 exe 打包。
