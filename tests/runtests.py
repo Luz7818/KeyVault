@@ -6,17 +6,17 @@ ModuleNotFoundError: No module named 'tests'，而 discover -t . 虽然能跑却
 按名字选单个用例。这个 shim 一次解决两件事。
 
 用法：
-    python -I runtests.py                       跑全部
-    python -I runtests.py tests.test_cli_m0     跑一个模块
-    python -I runtests.py tests.test_x.TestY.test_z
-    python -I runtests.py -v                    详细输出
+    python -I tests/runtests.py                       跑全部
+    python -I tests/runtests.py tests.test_cli_m0     跑一个模块
+    python -I tests/runtests.py tests.test_x.TestY.test_z
+    python -I tests/runtests.py -v                    详细输出
 """
 
 import sys
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 

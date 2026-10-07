@@ -1,12 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec — 把 kv GUI 打成单个 kv.exe。
 
-构建：pyinstaller kv.spec --clean
-产物：dist/kv.exe
+构建：packaging/build.bat（或仓库根执行 pyinstaller packaging/kv.spec --clean）
+产物：dist/kv.exe（固定在仓库根，build.bat 写死 --distpath/--workpath）
 """
 
 a = Analysis(
-    ['kv_gui.py'],
+    ['../kv_gui.py'],
     pathex=[],
     binaries=[],
     datas=[],

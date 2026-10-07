@@ -14,7 +14,7 @@
 |---|---|---|---|
 | 1 | 剪贴板端到端测试稳定性：10-04 核查在非交互会话实测 1 error（环境耦合），本轮实测已过。连续两轮门禁均 0 error 后在 HISTORY 记一条观察结论并注销本条 | `python -I -m unittest discover -s tests -t .` 连续两轮 `OK (skipped=2)` | 进行中 |
 | 2 | `kv scan` 大规模性能基准：生成 10,000 条密钥的 vault 扫一遍并计时 | 基准脚本入库，耗时数字与机器说明登记进 `AGENTS.md`「当前状态」 | 待开始 |
-| 3 | 打包发布流程固化：`build.bat` 打包后自动校验 `dist/kv.exe` 可启动且版本号与 `kv/__init__.py` 一致 | 校验脚本入库并接入 build.bat，版本不一致时报错退出 | 待开始 |
+| 3 | 打包发布流程固化：`packaging/build.bat` 打包后自动校验 `dist/kv.exe` 可启动且版本号与 `kv/__init__.py` 一致 | 校验脚本入库并接入 build.bat，版本不一致时报错退出 | 待开始 |
 
 状态取值：待开始 / 进行中 / 待确认 / 完成。
 

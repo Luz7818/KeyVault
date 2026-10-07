@@ -15,13 +15,11 @@ CLI（`kv.py` → `kv/cli.py` 的 argparse 命令树）与桌面 GUI（`kv_gui.p
 ```
 KeyVault/
 ├── kv/                主包（capture/ commands/ core/ crypto/ detect/ gui/ ops/ parse/）
-├── tests/             测试套件（含金标语料 corpus/）
-├── build/ dist/       PyInstaller 产物，不入库（.docsignore 已登记）
+├── packaging/         打包链路：build.bat + kv.spec（详见 packaging/README.md）
+├── tests/             测试套件（含金标语料 corpus/ 与 runtests.py 入口 shim）
+├── build/ dist/       PyInstaller 产物，不入库（.gitignore 已排除）
 ├── kv.py              CLI 启动 shim：修正 sys.path + 强制 UTF-8 后调 kv.cli.main()
 ├── kv_gui.py          GUI 启动 shim
-├── runtests.py        unittest 发现 shim
-├── kv.spec            PyInstaller 打包配置
-├── build.bat          Windows 构建脚本
 └── (九件文档)         README / AGENTS / 目录说明 / HISTORY / TODO / docs/
 ```
 
@@ -29,10 +27,10 @@ KeyVault/
 |---|---|
 | `kv.py` | CLI 入口。直接 `python -m kv` 会因 cp936 踩编码坑，一律走这个 shim |
 | `kv_gui.py` | GUI 入口 shim |
-| `runtests.py` | `python runtests.py` 等价于 unittest discover |
-| `kv.spec` | PyInstaller 打包配置（产出 `dist/kv.exe`） |
-| `build.bat` | 一键打包脚本 |
 | `kv/__init__.py` | 版本号 `0.1.0`、`SCHEMA_VERSION=1`、`PROGRAM="kv"` 的常量单源 |
+
+打包链路（`packaging/build.bat` + `packaging/kv.spec`）与测试入口（`tests/runtests.py`）
+的职责见各自目录的 README。
 
 ## 数据组织方式
 

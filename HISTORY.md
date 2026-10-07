@@ -144,3 +144,12 @@
 - 验证：全量 548 条 `OK (skipped=2)`；截图目检（17px 正文 + 1180 宽窗口
   比例协调）。dist/kv.exe 重打包时文件被占用（应用运行中），关掉后重跑
   `build.bat` 即可。
+
+## 2026-10-07 · 根目录最小化：测试与打包链路归位
+
+- 按《文档标准》§2.3 最小根原则收拢根文件：`runtests.py` → `tests/runtests.py`（测试入口
+  与测试套件同目录，`ROOT` 推导改两层）；`build.bat` + `kv.spec` → `packaging/`（构建脚本、
+  打包配置与说明同目录），spec 入口改 `../kv_gui.py`，build.bat 先回仓库根再打包并写死
+  `--distpath dist --workpath build`——产物路径 `dist/kv.exe` 不变。
+- 根 shim `kv.py`/`kv_gui.py` 按 §2.3 第 4 条（入口脚本留根）保留。
+- 验证：`python -I tests/runtests.py` 全量通过；`check_docs.py KeyVault` 阻断无、提醒无。

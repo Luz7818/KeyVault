@@ -11,7 +11,7 @@
 
 | 判定 | 规则 |
 |---|---|
-| 必须入库 | `kv/`、`tests/`（含金标语料）、`docs/`、根 shim（`kv.py`/`kv_gui.py`/`runtests.py`）、构建配置（`kv.spec`/`build.bat`）、九件文档 |
+| 必须入库 | `kv/`、`tests/`（含金标语料与 `runtests.py` 入口 shim）、`docs/`、根 shim（`kv.py`/`kv_gui.py`）、打包链路（`packaging/`）、九件文档 |
 | 禁止上传 | `build/`、`dist/`（PyInstaller 产物，`.docsignore`/`.gitignore` 已挡）；`__pycache__/`、`.pytest_cache/` |
 | **绝对禁止** | **任何 vault 数据（`.kv/` 数据库）与明文密钥**——密钥本体只活在 DPAPI 加密的 vault 里，永不入库 |
 

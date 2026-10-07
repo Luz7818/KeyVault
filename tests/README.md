@@ -8,6 +8,7 @@ tests 包含 kv 项目的全部测试：单元测试、集成测试、CLI 端到
 
 | 文件 | 干什么 | 备注 |
 |---|---|---|
+| `runtests.py` | 测试入口 shim：修 `python -I` 下 sys.path 缺失，支持按模块/用例名选用 | `python -I tests/runtests.py [模块[.类.方法]] [-v]` |
 | `__init__.py` | 包标记 | — |
 | `fakes.py` | 测试替身：PlaintextProtector、FakeClipboard、FakeClock | 被所有测试引用 |
 | `test_arch.py` | 架构约束测试（函数长度、encoding= 强制等） | 门禁 |
