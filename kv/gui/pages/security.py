@@ -62,12 +62,25 @@ class SecurityPage(ttk.Frame):
         bar.pack(fill="x")
         RoundButton(bar, "加载日志", self._load_audit).pack(side="left")
         RoundButton(bar, "校验链", self._verify_audit).pack(side="left", padx=theme.GAP)
+        ttk.Label(bar, text="事件", style="Sub.TLabel").pack(side="left", padx=(theme.PAD, 4))
+        self._audit_event = tk.StringVar(value="全部")
+        self._audit_event_cb = ttk.Combobox(
+            bar, textvariable=self._audit_event, width=10, state="readonly",
+        )
+        self._audit_event_cb.pack(side="left")
+        self._audit_event_cb.bind("<<ComboboxSelected>>", lambda _: self._apply_audit_filter())
+        ttk.Label(bar, text="记录名含", style="Sub.TLabel").pack(side="left", padx=(theme.PAD, 4))
+        self._audit_name = tk.StringVar()
+        name_entry = RoundEntry(bar, textvariable=self._audit_name, width=160)
+        name_entry.pack(side="left")
+        name_entry.entry.bind("<KeyRelease>", lambda _e: self._apply_audit_filter())
         audit_card = Card(self._audit_tab)
         audit_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._audit_table = DataTable(
             audit_card.body, AUDIT_COLS, headings=AUDIT_HEADS, widths=AUDIT_WIDTHS,
         )
         self._audit_table.pack(fill="both", expand=True, padx=1, pady=1)
+        self._audit_events: list = []
 
     def _build_maint(self) -> None:
         exp = ttk.LabelFrame(self._maint_tab, text="过期检查", padding=theme.PAD)
@@ -164,13 +177,29 @@ class SecurityPage(ttk.Frame):
         self._app.run_async(store.list_audit, limit=200, on_done=self._show_audit)
 
     def _show_audit(self, events: list) -> None:
+        self._audit_events = events
+        kinds = ("全部",) + tuple(sorted({e["event"] for e in events}))
+        self._audit_event_cb.configure(values=kinds)
+        self._audit_event.set("全部")
+        self._audit_name.set("")
+        self._apply_audit_filter()
+
+    def _apply_audit_filter(self) -> None:
+        event = self._audit_event.get()
+        needle = self._audit_name.get().strip().lower()
         self._audit_table.clear()
-        for e in events:
+        shown = 0
+        for e in self._audit_events:
+            if event != "全部" and e["event"] != event:
+                continue
+            if needle and needle not in (e["name_snapshot"] or "").lower():
+                continue
             self._audit_table.insert_row((
                 str(e["id"]), e["ts"][:19], e["event"], e["actor"],
                 e["name_snapshot"] or "", (e["sha256_prefix"] or "")[:12],
             ))
-        self._app.set_status(f"{len(events)} 条审计记录")
+            shown += 1
+        self._app.set_status(f"{shown} 条审计记录（共 {len(self._audit_events)} 条）")
 
     def _verify_audit(self) -> None:
         store = self._app.store

@@ -70,6 +70,9 @@ class CapturePage(ttk.Frame):
             bar, "接受", lambda: self._review_action("accept"), kind="accent",
         ).pack(side="left", padx=theme.GAP)
         RoundButton(bar, "跳过", lambda: self._review_action("skip")).pack(side="left")
+        RoundButton(
+            bar, "接受全部（高置信）", self._accept_all, kind="accent",
+        ).pack(side="left", padx=theme.GAP)
         review_card = Card(self._review_tab)
         review_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._review_list = tk.Listbox(
@@ -164,6 +167,24 @@ class CapturePage(ttk.Frame):
                 "end", f"{i + 1}. {v.platform}（{v.confidence}）{item.candidate.preview('*')}",
             )
         self._app.set_status(f"{len(self._review_items)} 条待审")
+
+    def _accept_all(self) -> None:
+        """批量接受队列里的全部高置信候选（CLI a 键的同款逻辑）。"""
+        from kv.ops import review as reviewops
+
+        store = self._app.store
+        if store is None or not self._review_items:
+            self._app.set_status("队列为空——先加载待审")
+            return
+        outcome = reviewops.review(
+            self._review_items, store, interactive=False, auto=True, actor="gui",
+        )
+        self._review_list.delete(0, "end")
+        self._review_items = []
+        self._app.set_status(
+            f"批量接受：存入 {outcome.accepted}，重复 {outcome.deduped}，跳过 {outcome.skipped}",
+            color=theme.SUCCESS,
+        )
 
     def _review_action(self, action: str) -> None:
         sel = self._review_list.curselection()
