@@ -36,11 +36,11 @@ python --version
 ## 3. 跑一遍最小流程
 
 ```bash
-# 1. 初始化 vault（在当前目录创建 .kv/ 子目录和 SQLite 数据库）
+# 1. 初始化 vault（数据库默认建在 %LOCALAPPDATA%\KeyVault\，不在当前目录）
 python kv.py init
 
 # 2. 存一条密钥
-python kv.py add my-api-key sk-abcdef1234567890abcdef1234567890abcdef12
+python kv.py add --name my-api-key --value sk-abcdef1234567890abcdef1234567890abcdef12
 
 # 3. 查看记录列表
 python kv.py list
@@ -49,18 +49,20 @@ python kv.py list
 预期看到：
 
 ```
-  #  名称          平台         状态    创建时间
-  1  my-api-key    deepseek     active  2026-10-04 ...
+  #  名称         平台               预览         创建         状态    标签
+  1  my-api-key   openai-compatible  sk-****f12   2026-10-12   active
+共 1 条
 ```
 
-（平台列是 `kv` 识别出的平台 id，`deepseek` 只是示例值。）
+（平台列是 `kv` 识别出的平台 id；裸 `sk-` 值没有主机名/键名信号时会存成 `openai-compatible`
+并提示歧义，用 `kv set-platform my-api-key <平台>` 修正。表列以 `kv list` 实际输出为准。）
 
 各参数含义：
 
 | 参数 | 作用 | 常用值 |
 |---|---|---|
-| `init` 后的目录 | vault 位置，`.kv/` 子目录存放数据库 | 默认当前目录 |
-| `add <名称> <值>` | 名称是你给这条记录起的别名，值是原始密钥文本 | — |
+| `init` | 在默认位置建 vault 目录与 SQLite 数据库 | 默认 `%LOCALAPPDATA%\KeyVault\`，可用 `--vault-dir` 或环境变量 `KV_VAULT_DIR` 改 |
+| `add --name <名称> --value <值>` | 名称是你给这条记录起的别名，值是原始密钥文本 | 值也可用 `--value-file` / `--stdin` / 隐藏提示给出 |
 | `list` | 列出所有记录，不显示明文值 | — |
 
 ## 4. 日常怎么用
@@ -122,7 +124,7 @@ python kv.py import .env
 ### 4.7 注入密钥到 .env 文件
 
 ```bash
-python kv.py use my-api-key --target ./my-project/.env
+python kv.py use my-api-key --to ./my-project/.env
 ```
 
 从 vault 取出明文，写入目标 `.env` 文件的对应变量。自动检查 `.gitignore`。

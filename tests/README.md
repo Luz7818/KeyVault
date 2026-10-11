@@ -1,4 +1,4 @@
-# tests/ —— 测试套件：548 条用例 + 金标语料
+# tests/ —— 测试套件：572 条用例 + 金标语料
 
 > 用途：说明本目录在整个项目里管哪一段,以及每个文件干什么。
 
@@ -16,6 +16,8 @@ tests 包含 kv 项目的全部测试：单元测试、集成测试、CLI 端到
 | `test_cli_m2.py` | M2 验收：copy/watch/review/fix/rename/tag 端到端 | — |
 | `test_cli_m3.py` | M3 验收：import/use/rotate/revoke 端到端 | — |
 | `test_cli_m4.py` | M4 验收：scan/audit/expire/purge 端到端 | — |
+| `test_cli_backup.py` | export/restore 端到端：口令校验、跨库恢复、去重 | — |
+| `test_gui_tabbar.py` | TabBar 堆叠序回归：初始标签内容必须可见 | 需要显示环境（无则 skip） |
 | `test_console.py` | console 模块：表格输出、掩码渲染、用户交互 | — |
 | `test_capture_watch.py` | watch 循环：自动检测、手动操作、spool 模式 | — |
 | `test_capture_wipe.py` | 剪贴板擦除：定时、sweep、wipe helper | — |

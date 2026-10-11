@@ -34,8 +34,9 @@ KeyVault/
 
 ## 数据组织方式
 
-- vault 是 SQLite 库：`kv init` 在当前目录建 `.kv/`（已 gitignore）；默认全局位置
-  `%LOCALAPPDATA%\KeyVault\`（特意不用 `%APPDATA%`，避开域漫游同步）。schema 单源在
+- vault 是 SQLite 库：`kv init` 默认建在 `%LOCALAPPDATA%\KeyVault\`（特意不用
+  `%APPDATA%`，避开域漫游同步），可用 `--vault-dir` 或环境变量 `KV_VAULT_DIR` 改；
+  vault 目录自动写入自排除 `.gitignore`。schema 单源在
   `kv/core/schema.sql`；改 schema 必须递增 `kv/__init__.py` 的 `SCHEMA_VERSION`，
   否则 `check_version()` 拒绝旧库。
 - **`fingerprint` 表存所有历史值**：包括 revoked 的——`kv scan` 靠它找泄露的旧 key。
@@ -50,7 +51,7 @@ KeyVault/
 kv.py / kv_gui.py（shim）
    └── kv/cli.py（argparse + dispatch）
           └── kv/commands/（参数 → 调用 → 输出）
-                 └── kv/ops/（save/scan/rotate/import/inject/expiry/purge/fix/review）
+                 └── kv/ops/（save/scan/rotate/import/inject/expiry/purge/fix/review/backup）
                         └── kv/core/（repo 唯一 DML 层、schema、audit、paths、clock）
 领域支撑：kv/crypto（DPAPI ctypes 封装）、kv/detect（规则/解析/纠正/报告）、
          kv/parse（dotenv/AWS CSV/curl/JSON/pipeline）、kv/capture（剪贴板/watch/wipe）
@@ -74,9 +75,21 @@ kv.py / kv_gui.py（shim）
 - Windows-only：DPAPI 绑定当前用户，无跨平台与多用户共享路径，这是有意取舍不是欠账。
 - 无 lint、无 CI：stdlib 零依赖约束下的选择，门禁是 unittest 全量 + `selftest --golden`。
 
-## 备份格式（2026-10-07，随批1 落地）
+## 扫描与擦除的边界行为（2026-10-12，随「实测问题修复批」落地）
+
+- `kv scan` 的路径不存在 → `NotFoundError`（exit 2），目标不是目录 → `UsageError`（exit 1）。
+  此前的路径 `os.walk` 对无效根目录静默返回空，把「路径打错」伪装成「扫过、很干净」。
+- `kv scan` 剪枝 `.git` / `__pycache__` / `node_modules` / 虚拟环境与工具缓存目录
+  （`kv/ops/scan.py` 的 `SKIP_DIR_NAMES`，原地改 `dirnames` 不进入）。
+- `kv copy` 派出的擦除 helper 显式携带 `--vault-dir`（helper 打开哪个库不靠 cwd/环境变量巧合）；
+  冻结态（`sys.frozen`）下 helper 即 exe 自身：`kv_gui.py` 对 `_wipe` 开头的 argv 做 CLI 分发，
+  且与 CLI 分发的 `spawn_helper` 参数形态保持一致（前缀 + id + `--vault-dir`）。
+
+## 备份格式（2026-10-07，随批1 落地；2026-10-12 补 CLI 入口）
 
 `.kvb` = `KVBK1\n` + salt(16) + nonce(16) + ct + HMAC-SHA256 tag(32)。
+CLI 入口 `kv export --to` / `kv restore --from`（口令走隐藏提示，不进 argv）；
+GUI 安全页「备份 / 恢复」是同一 `kv/ops/backup.py` 的第二种界面。
 明文是 JSON（version/exported_at/records[]），**value 以 base64 存明文**，
 不是 DPAPI 密文——blob 换机/重装即解不开，备份密文等于备份废铁。
 口令是唯一防线：scrypt(n=2^15, r=8, p=1, dklen=64, maxmem 64MB) 派生

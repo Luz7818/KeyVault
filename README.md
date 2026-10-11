@@ -4,9 +4,9 @@
 
 kv 是一个纯 Python 实现的本地密钥保管 CLI 工具，用 Windows DPAPI 加密、SQLite 存储，零外部依赖。它能存 API Key、检测泄露、自动剪贴板捕获、审计溯源，所有数据不出本机。
 
-输入一条 `kv add ds sk-abc...`，值经 DPAPI 加密后写入 SQLite；`kv copy ds` 把明文放到剪贴板，30 秒后自动擦除；`kv scan ./repo` 扫描目录树，用已存指纹匹配泄露的密钥，输出文件名和行号。
+输入一条 `kv add --name ds --value sk-abc...`，值经 DPAPI 加密后写入 SQLite；`kv copy ds` 把明文放到剪贴板，30 秒后自动擦除；`kv scan ./repo` 扫描目录树，用已存指纹匹配泄露的密钥，输出文件名和行号。
 
-**557 条测试 · 96 个源文件 · 17 759 行 Python（复核：`python -I -m unittest discover -s tests -t .`、
+**572 条测试 · 101 个源文件 · 18 481 行 Python（复核：`python -I -m unittest discover -s tests -t .`、
 `find . -name "*.py" -not -path "*/__pycache__/*" | wc -l` 及同命令把 `wc -l` 换成按文件累加行数）**
 
 ## 30 秒跑通
@@ -14,11 +14,13 @@ kv 是一个纯 Python 实现的本地密钥保管 CLI 工具，用 Windows DPAP
 ```bash
 # 在仓库根目录执行（Windows，Python 3.12+）
 python kv.py init
-python kv.py add mykey sk-abcdef1234567890
+python kv.py add --name mykey --value sk-abcdef1234567890
 python kv.py list
 ```
 
-看到 `1 条记录` 就说明装对了。想要完整步骤看 [上手手册](docs/GET-START.md)。
+vault 默认建在 `%LOCALAPPDATA%\KeyVault\`，不在当前目录；可用 `--vault-dir` 或环境变量 `KV_VAULT_DIR` 改。
+
+看到 `共 1 条` 就说明装对了。想要完整步骤看 [上手手册](docs/GET-START.md)。
 
 ## 它能做什么
 
@@ -26,11 +28,13 @@ python kv.py list
 |---|---|---|
 | 存取密钥 | `kv add` / `kv show` / `kv reveal` / `kv rm` | [kv/commands/store.py](kv/commands/store.py) |
 | 桌面 GUI | `python kv_gui.py` 或 `dist/kv.exe` | [kv/gui/](kv/gui/) |
+| 命令行打包版 | `dist/kv-cli.exe`（build.bat 产出，与 kv.exe 同批） | [packaging/](packaging/) |
 | 泄露扫描 | `kv scan <目录>` | [kv/ops/scan.py](kv/ops/scan.py) |
 | 剪贴板捕获 | `kv copy` / `kv watch` | [kv/capture/](kv/capture/) |
 | 密钥轮换 | `kv rotate` / `kv revoke` | [kv/ops/rotate.py](kv/ops/rotate.py) |
 | 批量摄入 | `kv import` / `kv use` | [kv/ops/importer.py](kv/ops/importer.py) |
 | 审计溯源 | `kv audit` | [kv/core/audit.py](kv/core/audit.py) |
+| 备份恢复 | `kv export` / `kv restore` | [kv/ops/backup.py](kv/ops/backup.py) |
 | 过期/清除 | `kv expire` / `kv purge` | [kv/ops/expiry.py](kv/ops/expiry.py)、[kv/ops/purge.py](kv/ops/purge.py) |
 | 检测规则自测 | `kv selftest --golden` | [kv/selftest.py](kv/selftest.py) |
 

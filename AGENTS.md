@@ -91,13 +91,13 @@ stdlib 零依赖）；外科手术式改动（不动无关代码，每行改动�
 
 | 项 | 值 | 复核命令 |
 |---|---|---|
-| 测试 | `Ran 557, OK (skipped=2)`，0 失败（2026-10-07 实测） | `python -I -m unittest discover -s tests -t .` |
-| 金标自测 | `selftest --golden` 全过 | `python kv.py selftest --golden` |
+| 测试 | `Ran 572, OK (skipped=2)`，0 失败（2026-10-12 实测） | `python -I -m unittest discover -s tests -t .` |
+| 金标自测 | `selftest --golden` 全过（92 条） | `python kv.py selftest --golden` |
 | 静态检查 | 无 lint 配置（有意） | — |
 | CI | 无 | — |
 | 运行时依赖 | 零（stdlib only） | — |
 | Python | 3.12+ | `python --version` |
-| 源文件 | 96 个 `.py` + 1 个 `.sql` | `find . -name "*.py" -not -path "*/__pycache__/*" \| wc -l` |
+| 源文件 | 101 个 `.py` + 1 个 `.sql` | `find . -name "*.py" -not -path "*/__pycache__/*" \| wc -l` |
 | 版本 | `0.1.0` / `SCHEMA_VERSION=1` | `python kv.py --version` |
 | 版本控制 | 2026-10-05 起 git 建档（main） | `git log --oneline` |
 
@@ -108,7 +108,14 @@ stdlib 零依赖）；外科手术式改动（不动无关代码，每行改动�
   `console.setup_stdio()` 处理。
 - `list_audit` 返回 `ORDER BY id DESC`：`events[0]` 是最新、`events[-1]` 是最旧。
 - rotate 保留旧指纹的 `value_blob`——scan 靠它检测泄露的旧值，不要"顺手"归零。
-- `kv scan` 有 gate：先 `selftest --golden` 通过，否则 `EXIT_GATE` 拒绝执行。
+- `scan` 有 gate：先 `selftest --golden` 通过，否则 `EXIT_GATE` 拒绝执行。
+- `scan` 的路径不存在是**报错**不是「干净」——`os.walk` 对无效根目录静默返回空，
+  已在 `ops/scan.py` 拦住；改扫描遍历时别退回裸 `os.walk`。
+- `copy` 的擦除 helper 靠 `--vault-dir` 找到同一个库、靠**指纹比对**决定擦不擦；
+  冻结态（exe）下 helper 是 `kv_gui.py` 接住的 `_wipe` argv —— 改 `spawn_helper`
+  的参数形态必须同时改 `kv_gui.py` 的分发判定，两处是一对。
+- GUI 的 TabBar 是 place 堆叠 + tkraise：`add()` 之后必须重新 tkraise 当前页，
+  否则后注册的标签会盖住初始页（三页首显错位的历史 bug）。
 - 不要在 `repo.py` 以外写 DML（审计链会断）；不要删 `tests/corpus/` 金标语料；
   不要改 `schema.sql` 而不递增 `SCHEMA_VERSION`；不要引入外部依赖（stdlib only）。
 - vault 数据（`.kv/`）永不入库——见 [docs/GIT.md](docs/GIT.md)。

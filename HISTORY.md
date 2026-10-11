@@ -285,3 +285,40 @@
 - 验证：`find_closest` 命中项带正确 tag、点击后 current 切换、画布上
   pill 恰好 1 个、RoundEntry 输入与 var 同步；全量 557 条 `OK (skipped=2)`；
   新 exe 打包通过。
+
+## 2026-10-12 · 全量实测修复批（用户反馈「实际使用有很多问题和 bug」）
+
+实测口径：真 CLI 端到端（独立沙箱 vault，不碰用户数据）+ 源码 GUI 自动化交互 +
+双 exe（kv.exe / kv-cli.exe）冻结态验证；先复现后修复，每条都留了回归测试。
+
+- **文档面（README / GET-START / ARCHITECTURE）**：`kv add ds sk-abc` 位置参数根本不
+  存在（实际 `--name/--value`），「30 秒跑通」首步必失败；vault 位置写成「当前目录建
+  `.kv/`」实际是 `%LOCALAPPDATA%\KeyVault\`；`use --target` 实际是 `--to`；
+  「548 个用例」过期。全部按实际行为改写，附 `--vault-dir`/`KV_VAULT_DIR` 说明。
+- **TabBar 初始标签错位（三页全中）**：`add()` 立即 place 内容层，place 堆叠序 =
+  创建序，后注册的标签盖住初始页 —— 捕获/批量操作/安全页首显时高亮第一个标签、
+  显示的却是最后一个标签的内容（点一下才自愈）。修：`add()` 每次重新 tkraise 当前页；
+  新增 `tests/test_gui_tabbar.py`（winfo containing 行为级断言，旧代码 FAILED）。
+- **`kv copy` 自动擦除两处静默失效**：(1) `spawn_helper` 不传 `--vault-dir`，
+  helper 打开默认库查不到 wipe 行就放弃 —— `--vault-dir` 下密钥永远留在剪切板；
+  (2) 冻结态 helper 命令 `python -I kv.py _wipe N` 在 exe 里等于再启动一个 GUI，
+  每复制一次弹一个幽灵窗口且永不擦除。修：`spawn_helper` 显式带 vault_dir 并在
+  `sys.frozen` 下改派 exe 自身；`kv_gui.py` 对 `_wipe` argv 做 CLI 分发；
+  spec 把 `kv.cli` 进 hiddenimports。真机验证：源码模式与双 exe 模式擦除均到位。
+- **`kv scan` 谎报 clean**：路径不存在时 `os.walk` 静默返回空 → 「未发现泄露」exit 0。
+  安全工具的假 clean 比报错严重。修：不存在报 `NotFoundError`（exit 2）、非目录报
+  `UsageError`（exit 1）；应用户报告顺带剪枝 `.git`/`__pycache__`/`node_modules`/
+  虚拟环境与工具缓存目录（GUI 实测扫同目录 25 文件 vs CLI 2 文件即此因）。
+- **`kv export` 命令不存在**：`init` 的 R1 警告点名「现在就做一次导出：kv export
+  --to …」但 CLI 没有该命令。修：新增 `kv export --to` / `kv restore --from`
+  （`kv/commands/backup.py`，口令走隐藏提示不进 argv），复用 `kv/ops/backup.py`。
+- **打包链路补 CLI 产物**：spec 新增 `kv-cli.exe`（console=True，入口 `kv.py`，独立
+  Analysis），补上命令行用户拿 kv.exe 只能得 GUI 的缺口。
+- **测试卫生**：`tests/test_capture_wipe.py` 不再真起分离子进程（曾经每轮测试开一个
+  打开真实用户 vault 的进程 + ResourceWarning），mock `spawn_helper` 并断言 vault_dir
+  传递；`tests/test_ops_fix.py` 的 `[OK] 已记住` 不再泄漏进测试报告。
+- **杂项**：设置页信息区高度 16→10 行（修复底部「界面缩放」被窗口裁切）；
+  扫描结果表「文件」列 280→430（Windows 长路径不再截断）；
+  `use` 被 git 跟踪时的提示不再循环推荐 `--gitignore`（改指 `git rm --cached`）。
+- 门禁：全量 572 条 `OK (skipped=2)`；`selftest --golden` 92 条全 PASS；
+  重打包通过，双 exe 均冒烟验证。
