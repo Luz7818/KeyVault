@@ -1,32 +1,43 @@
 @echo off
-chcp 65001 >nul
-REM 构建 kv.exe — 需要 Python 3.12+ 和 pip
-REM 产物固定在仓库根 dist\kv.exe（README/目录说明引用的约定路径）
+REM Build kv.exe (GUI) + kv-cli.exe (CLI) - needs Python 3.12+ and pip.
+REM Artifacts land in dist\ (paths referenced by README / docs).
+REM KEEP THIS FILE ASCII-ONLY: Chinese text in a UTF-8 bat under chcp 65001
+REM makes cmd swallow the head of a line at certain byte offsets (reproduced
+REM with a 164-byte script). See packaging/README.md "Do not".
 
-REM 无论从哪里双击，都先回到仓库根，产物与缓存路径才不漂移
+REM Always start from the repo root, wherever this script is launched from.
 cd /d "%~dp0.."
 
-echo [1/3] 检查 PyInstaller…
+chcp 65001 >nul
+
+echo [1/4] Checking PyInstaller...
 python -m pip show pyinstaller >nul 2>&1
 if errorlevel 1 (
-    echo 未安装，正在安装 PyInstaller…
+    echo Not found - installing PyInstaller...
     python -m pip install pyinstaller -q
     if errorlevel 1 (
-        echo 安装失败，请确认 python 和 pip 在 PATH 里
+        echo Install failed. Make sure python and pip are on PATH.
         pause
         exit /b 1
     )
 )
 
-echo [2/3] 打包…
+echo [2/4] Building...
 python -m PyInstaller packaging\kv.spec --clean -y --distpath dist --workpath build
 if errorlevel 1 (
-    echo 打包失败——最常见原因是 dist\kv.exe 正在运行，请先关闭它再重试
+    echo Build failed - most common cause: dist\kv.exe is still running.
     pause
     exit /b 1
 )
 
-echo [3/3] 完成
-echo 产物：dist\kv.exe
-echo 双击即可运行，不需要安装 Python。
+echo [3/4] Verifying artifacts (version / init / golden / _wipe / GUI)...
+python packaging\verify.py
+if errorlevel 1 (
+    echo Verification FAILED - do not ship these artifacts.
+    pause
+    exit /b 1
+)
+
+echo [4/4] Done.
+echo Artifacts: dist\kv.exe ^(GUI^) + dist\kv-cli.exe ^(CLI^). No Python needed to run.
 pause

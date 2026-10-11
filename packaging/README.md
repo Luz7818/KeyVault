@@ -6,8 +6,9 @@
 
 | 文件 | 干什么 | 备注 |
 |---|---|---|
-| `build.bat` | 一键构建：装 PyInstaller → 按本目录 `kv.spec` 打包 → 提示产物位置 | 双击或在仓库根运行均可；先回仓库根再打包，产物固定在 `dist/` |
-| `kv.spec` | PyInstaller 配置：两个入口 —— `kv_gui.py`（GUI）+ `kv.py`（CLI），各自独立 Analysis | 产物 `kv.exe`（console=False）与 `kv-cli.exe`（console=True） |
+| `build.bat` | 一键构建：装 PyInstaller → 按本目录 `kv.spec` 打包 → `verify.py` 校验 → 提示产物位置 | **纯 ASCII**（见「别动」）；双击或在仓库根运行均可；产物固定在 `dist/` |
+| `kv.spec` | PyInstaller 配置：两个入口 —— `kv_gui.py`（GUI）+ `kv.py`（CLI），各自独立 Analysis；`datas` 必须带 `kv/core/schema.sql` 与 `tests/corpus`（冻结态按 `__file__` 相对路径找它们，`tests/test_arch.py` 有断言守着） | 产物 `kv.exe`（console=False）与 `kv-cli.exe`（console=True） |
+| `verify.py` | 打包后校验：版本号一致、`init` 可用（schema 进包）、`selftest --golden` 通过（语料进包）、`_wipe` 冻结态短路、GUI 能启动；任一失败退出码 1 | 只回收校验时新起的 kv.exe，用户自己开着的绝不动 |
 
 ## 两个产物各是干什么的
 
@@ -32,6 +33,12 @@
   spec 在本目录、入口在根，挪动任何一侧要同步改另一侧。
 - 两个 EXE 各自独立 `Analysis`/`PYZ`：复用 GUI 的 `a.scripts` 会让 `kv-cli.exe`
   启动 GUI 窗口，复用 CLI 的会让 `kv.exe` 丢掉界面。
+- `kv.spec` 的 `datas` 少了 `kv/core/schema.sql` 或 `tests/corpus`，exe 会在
+  **运行期**才炸（init 报「文件不存在」/ scan 被 golden 闸门永久拒绝）——
+  `tests/test_arch.py::TestPackagingDataFiles` 与 `verify.py` 是两道防线。
+- `build.bat` 保持**纯 ASCII**：实测中文行 + `chcp 65001` 的 cmd 在特定字节
+  偏移处会吞掉下一行行首（164 字节的脚本即可复现，末行 `echo 不需要…` 的前
+  半被吃）。中文说明留在本文件，构建脚本不要本地化。
 - `--distpath dist --workpath build` 写死在 `build.bat`：产物路径是 README/目录说明引用的
   约定位置，别让它随打包时的当前目录漂移。
 - `kv.exe` 的 `console=False` 是桌面交付约定：排查问题时临时改 True 可以，提交前必须改回；
