@@ -14,6 +14,7 @@ import sqlite3
 import sys
 
 from kv import PROGRAM, __version__, console, errors
+from kv.commands import backup as backupcmd
 from kv.commands import capture as capturecmd
 from kv.commands import detect as detectcmd
 from kv.commands import ingest as ingestcmd
@@ -70,6 +71,8 @@ def _store_parsers(sub, common) -> None:
     p = sub.add_parser("doctor", parents=[common], help="体检：绑定、schema、自排除规则、云同步")
     p.set_defaults(func=storecmd.cmd_doctor)
 
+    _backup_parsers(sub, common)
+
     p = sub.add_parser("add", parents=[common], help="存一把 key")
     p.add_argument("--name", default="", help="记录名；不给就自动生成")
     p.add_argument("--value", default="", help="直接给值（会进 shell 历史，不推荐）")
@@ -117,6 +120,22 @@ def _store_parsers(sub, common) -> None:
     p.add_argument("--get", default="")
     p.add_argument("--set", default="", help="KEY=VALUE")
     p.set_defaults(func=storecmd.cmd_config)
+
+
+def _backup_parsers(sub, common) -> None:
+    """vault 生命周期：口令加密的 .kvb 全量导出与恢复。
+
+    export 被 init 的 R1 提示点名（DPAPI 换机即废铁），必须常驻命令面。
+    """
+    p = sub.add_parser("export", parents=[common],
+                       help="口令加密全量导出为 .kvb 备份（DPAPI 换机即废铁，这是唯一出路）")
+    p.add_argument("--to", required=True, help="备份文件路径（建议 .kvb 后缀）")
+    p.set_defaults(func=backupcmd.cmd_export)
+
+    p = sub.add_parser("restore", parents=[common],
+                       help="从 .kvb 备份恢复记录到当前库（重名同值跳过）")
+    p.add_argument("--from", dest="from_file", required=True, help="备份文件路径")
+    p.set_defaults(func=backupcmd.cmd_restore)
 
 
 def _detect_parsers(sub, common) -> None:
