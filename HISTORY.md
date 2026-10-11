@@ -322,3 +322,38 @@
   `use` 被 git 跟踪时的提示不再循环推荐 `--gitignore`（改指 `git rm --cached`）。
 - 门禁：全量 572 条 `OK (skipped=2)`；`selftest --golden` 92 条全 PASS；
   重打包通过，双 exe 均冒烟验证。
+
+## 2026-10-12 · 遗留任务处理批（TODO 四项清空）+ 两处计划外修复
+
+任务 1（剪贴板测试稳定性观察）：连续两轮全量 `Ran 572, OK (skipped=2)`、0 error，
+10-04 记录的环境耦合 error 未再复现，按验收标准在 TODO 注销本条。
+
+任务 2（scan 性能基准）：新增 `tests/bench_scan.py`（不进 unittest discover）——
+造 N 条密钥的真 DPAPI vault + M 文件目录树，计时 `scan_directory`。实测（i9-13900H /
+32 GB / NVMe SSD）：10 000 指纹 × 200 文件 / 1.2 MB → 3.0 s，其中约 2.4 s 是
+1 万次 DPAPI 解密、遍历+匹配本体约 0.6 s（`--fake` 对照 0.65 s）。数字与机器说明
+已登记 AGENTS「当前状态」。
+
+任务 3（打包校验固化）：新增 `packaging/verify.py`，五查任一失败退出码 1 ——
+版本号（kv-cli --version vs kv/__init__.py）、init 建库（schema 进包）、
+selftest --golden（语料进包）、`_wipe` 冻结态短路（不弹窗口）、GUI 真启动
+（窗口标题出现，只回收本次新起的进程，绝不动用户自己开的 kv.exe）。
+已接入 build.bat（构建→校验→失败即退）；失败路径自测（--expect 9.9.9 → exit 1）。
+
+任务 4（GUI exe 冻结态擦除冒烟）：实测通过 —— 在 dist/kv.exe（GUI）里经命令面板
+复制 → 状态栏「已复制，30 秒后自动擦除」→ 剪贴板 35 s 后被换成 benign 文本，
+审计链有 copy(gui) + wipe(wipe-helper)，pending_wipe=done，全程无幽灵窗口。
+
+**计划外发现 1 —— schema.sql 与 golden 语料未进包（严重）**：spec 的 datas 只带
+了 icon.png，两个 exe 一 `init` 就报「文件不存在：_MEIxxxx/kv/core/schema.sql」，
+`selftest --golden` 找不到语料 —— 冻结态 scan 的闸门永远过不了。此前测试都从源码
+建库所以从未暴露。修复：两个 Analysis 的 datas 补 `kv/core/schema.sql` 与
+`tests/corpus`（冻结态路径都基于 `__file__`，_MEIPASS 下同构，db.py 无需改）；
+`tests/test_arch.py::TestPackagingDataFiles` 新增断言防回归；verify.py 的
+init/golden 两查在旧包上实测拦截成功。
+
+**计划外发现 2 —— build.bat 中文行被 cmd 吞字节**：chcp 65001 + UTF-8 bat 下，
+中文行在特定字节偏移处会吞掉下一行行首（164 字节脚本复现：末行 `echo 不需要…`
+的 `echo 不需` 被吃，cmd 报 `'??安装' is not recognized`）。文案调整治不了，
+改为 build.bat 输出纯 ASCII（Python 侧的中文输出不受影响，正常显示）；
+packaging/README「别动」记录该约束与复现尺寸。
