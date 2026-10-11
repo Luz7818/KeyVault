@@ -198,6 +198,41 @@ class TestScan(_M4TestCase):
         self.assertEqual(len(result.hits), 3)
         self.assertEqual(result.scanned, 3)
 
+    def test_scan_rejects_missing_directory(self):
+        """路径不存在 → 报 NotFoundError，绝不报「未发现泄露」。"""
+        _add_secret(self.store, "ds", SECRET)
+        missing = Path(self._tmp.name) / "no-such-dir"
+        with self.assertRaises(errors.NotFoundError):
+            scanops.scan_directory(self.store, str(missing))
+
+    def test_scan_rejects_file_target(self):
+        """目标是文件不是目录 → UsageError（单文件用 kv detect --file）。"""
+        _add_secret(self.store, "ds", SECRET)
+        target = Path(self._tmp.name) / "a-file.txt"
+        target.write_text("hi\n", encoding="utf-8")
+        with self.assertRaises(errors.UsageError):
+            scanops.scan_directory(self.store, str(target))
+
+    def test_scan_skips_vcs_and_cache_dirs(self):
+        """.git / __pycache__ 等目录整个剪枝，不进文件数也不出命中。"""
+        _add_secret(self.store, "ds", SECRET)
+        scan_dir = Path(self._tmp.name) / "repo"
+        (scan_dir / ".git" / "objects").mkdir(parents=True)
+        (scan_dir / "__pycache__").mkdir()
+        (scan_dir / "node_modules" / "pkg").mkdir(parents=True)
+        # 三个被剪枝的目录里各埋一份密钥 —— 一处都不该命中
+        buried = [
+            scan_dir / ".git" / "COMMIT_EDITMSG",
+            scan_dir / "__pycache__" / "config.py",
+            scan_dir / "node_modules" / "pkg" / "index.js",
+        ]
+        for path in buried:
+            path.write_text(f"KEY = '{SECRET}'\n", encoding="utf-8")
+        (scan_dir / "real.txt").write_text("clean\n", encoding="utf-8")
+        result = scanops.scan_directory(self.store, str(scan_dir))
+        self.assertEqual(len(result.hits), 0)
+        self.assertEqual(result.scanned, 1)
+
 
 # ---------------------------------------------------------------- audit
 

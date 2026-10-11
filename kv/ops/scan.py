@@ -12,13 +12,21 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from kv import errors
 from kv.core import repo
 from kv.model import ScanHit
 
 # 50 MB 以上跳过 —— 日志、打包产物、数据库通常在这个量级。
 MAX_FILE_SIZE = 50 * 1024 * 1024
-# 探测头 8 KB 里有没有 \\x00。和 git/ripgrep 同一套路。
+# 探测头 8 KB 里有没有 \x00。和 git/ripgrep 同一套路。
 BINARY_CHECK_SIZE = 8192
+
+# 版本控制 / 依赖 / 工具缓存目录：里面没有「活的工作文件」，只会拖慢扫描
+# 并把 .git 对象库里的历史内容翻出来充数。
+SKIP_DIR_NAMES = frozenset({
+    ".git", ".hg", ".svn", "__pycache__", "node_modules",
+    ".venv", "venv", ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+})
 
 
 @dataclass(frozen=True)
@@ -126,7 +134,9 @@ def _walk_directory(
     scanned = 0
     skipped_binary = 0
     skipped_large = 0
-    for dirpath, _dirnames, filenames in os.walk(root):
+    for dirpath, dirnames, filenames in os.walk(root):
+        # 原地剪枝：os.walk 不会再进入被移除的目录
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIR_NAMES]
         for filename in filenames:
             filepath = os.path.join(dirpath, filename)
             try:
@@ -145,7 +155,23 @@ def _walk_directory(
 
 
 def scan_directory(store, root: str) -> ScanResult:
-    """扫描目录树，返回结构化结果。值在返回前全部归零。"""
+    """扫描目录树，返回结构化结果。值在返回前全部归零。
+
+    路径不存在或不是目录直接报错 —— os.walk 对无效根目录静默返回空，
+    那条路会把「路径打错了」伪装成「扫过了，很干净」。安全工具的
+    假 clean 比报错严重得多。
+    """
+    root_path = Path(root)
+    if not root_path.exists():
+        raise errors.NotFoundError(
+            f"扫描目标不存在：{root}",
+            hint="确认路径拼写；相对路径以当前目录为基准",
+        )
+    if not root_path.is_dir():
+        raise errors.UsageError(
+            f"扫描目标不是目录：{root}",
+            hint="kv scan 只接受目录；单文件检测用 kv detect --file",
+        )
     fps = _load_fingerprints(store)
     try:
         index = _build_index(fps)
