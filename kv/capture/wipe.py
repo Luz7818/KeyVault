@@ -75,7 +75,10 @@ def copy_secret(store, name: str, backend: ClipboardBackend, *,
                 conn, sha256=fingerprint, secret_id=row.id,
                 deadline_at=clock.plus_seconds(ttl),
             )
-        spawn_helper(wipe_id)
+        # helper 必须拿着同一个 vault 路径：它打开的是「命令行默认解析」的
+        # vault，而 copy 可以用 --vault-dir 指到别处 —— 不显式传，helper 就
+        # 会在错误的库里查 wipe 行，然后静默放弃，密钥永远留在剪切板上。
+        spawn_helper(wipe_id, vault_dir=store.db_path.parent)
 
     return CopyResult(
         name=row.name, platform=row.platform,
@@ -90,11 +93,22 @@ def _mask_char() -> str:
     return console.mask_char()
 
 
-def spawn_helper(wipe_id: int) -> int | None:
-    """起一个分离子进程去等到点擦除。返回 pid，起不来返回 None（清扫会兜住）。"""
+def spawn_helper(wipe_id: int, *, vault_dir: Path | None = None) -> int | None:
+    """起一个分离子进程去等到点擦除。返回 pid，起不来返回 None（清扫会兜住）。
+
+    vault_dir 显式随行：helper 打开哪个库不能依赖 cwd 或环境变量的巧合。
+    打包态（sys.frozen）下没有 kv.py 脚本和 -I 选项，helper 就是 exe 自己 ——
+    kv_gui.py 会对 `_wipe` 开头的 argv 做 CLI 分发。
+    """
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "_wipe", str(wipe_id)]
+    else:
+        cmd = [sys.executable, "-I", str(KV_PY), "_wipe", str(wipe_id)]
+    if vault_dir is not None:
+        cmd += ["--vault-dir", str(vault_dir)]
     try:
         process = subprocess.Popen(
-            [sys.executable, "-I", str(KV_PY), "_wipe", str(wipe_id)],
+            cmd,
             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             close_fds=True,

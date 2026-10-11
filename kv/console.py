@@ -61,8 +61,12 @@ def _to_stderr(prefix: str, text: str) -> None:
     stdout 是行缓冲/块缓冲而 stderr 无缓冲，不冲的话两条流会交错 ——
     实测过：init 的导出警告会跑到「vault 已建在」前面，读起来像是对一个
     还不存在的库发警告。
+
+    打包态（console=False 的 PyInstaller）下 stdout/stderr 是 None ——
+    print 对 None 静默跳过，但 flush 会 AttributeError，必须先挡。
     """
-    sys.stdout.flush()
+    if sys.stdout is not None:
+        sys.stdout.flush()
     print(f"{prefix}{text}", file=sys.stderr)
 
 

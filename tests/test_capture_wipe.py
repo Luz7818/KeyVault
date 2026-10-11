@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import tests  # noqa: F401
 from tests.fakes import FakeClipboard, FakeClock, PlaintextProtector
-
 from kv import clock
 from kv.capture import wipe
 from kv.core import db, masking, repo
@@ -154,6 +154,14 @@ class TestCopySecret(unittest.TestCase):
         self.clock.install()
         self.addCleanup(self.clock.uninstall)
         self.addCleanup(self._tmp.cleanup)
+        # 绝不起真分离子进程：那会开出一个打开真实用户 vault 的进程
+        spawned = self.spawned = []
+        self._spawn_patch = unittest.mock.patch.object(
+            wipe, "spawn_helper",
+            lambda wipe_id, *, vault_dir=None: spawned.append((wipe_id, vault_dir)) and None,
+        )
+        self._spawn_patch.start()
+        self.addCleanup(self._spawn_patch.stop)
 
     def test_copy_writes_clipboard_and_records_wipe(self):
         """copy_secret 把值放上剪切板，并创建一条 pending_wipe。"""
@@ -172,16 +180,27 @@ class TestCopySecret(unittest.TestCase):
         # 写入时带了 exclude_history=True
         self.assertTrue(backend.writes[-1][1])
 
-    def test_copy_without_wipe_leaves_no_pending(self):
-        """wipe=False 不创建 pending_wipe。"""
+    def test_copy_spawns_helper_with_vault_dir(self):
+        """排定擦除时，helper 拿到的是这个 vault 的目录 —— 而不是留给
+        cwd/环境变量去猜。回归：--vault-dir 下 helper 打开错误的库，
+        静默放弃擦除，密钥永远留在剪切板上。"""
         _add_secret(self.store)
-        backend = FakeClipboard()
         result = wipe.copy_secret(
-            self.store, "deepseek-main", backend, ttl=30.0,
+            self.store, "deepseek-main", FakeClipboard(), ttl=30.0,
+            actor="test", wipe=True,
+        )
+        self.assertEqual(self.spawned, [(result.wipe_id, self.vault)])
+
+    def test_copy_without_wipe_spawns_no_helper(self):
+        """wipe=False 不创建 pending_wipe，也不起 helper。"""
+        _add_secret(self.store)
+        result = wipe.copy_secret(
+            self.store, "deepseek-main", FakeClipboard(), ttl=30.0,
             actor="test", wipe=False,
         )
         self.assertIsNone(result.wipe_id)
         self.assertEqual(result.ttl, 0.0)
+        self.assertEqual(self.spawned, [])
 
     def test_copy_exclude_history_flag_propagates(self):
         """exclude_history=False 时写入不带排除标记。"""

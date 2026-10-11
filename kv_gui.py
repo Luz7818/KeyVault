@@ -23,6 +23,25 @@ for stream in (sys.stdout, sys.stderr):
             pass
 
 
+def _dispatch_frozen_cli() -> None:
+    """打包态里 kv.exe 兼职跑 CLI 子命令。
+
+    kv copy 派出的擦除 helper 在冻结态就是 exe 自己（sys.frozen 下没有
+    kv.py 脚本和 -I 选项）—— 不在这里接住 `_wipe` argv，它就会变成
+    「每复制一次密钥弹一个多余的 GUI 窗口，剪切板永不擦除」。
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    argv = sys.argv[1:]
+    if argv and argv[0] == "_wipe":
+        from kv.cli import main as _cli_main
+
+        sys.exit(_cli_main(argv))
+
+
+_dispatch_frozen_cli()
+
+
 def _dpi_scale() -> float:
     """进程级 DPI 感知，返回缩放系数。必须在创建任何 Tk 窗口之前调用。"""
     try:
