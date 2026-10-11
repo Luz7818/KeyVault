@@ -354,5 +354,30 @@ class TestFileBudgets(unittest.TestCase):
         self.assertLessEqual(longest, self.FUNCTION_LIMIT)
 
 
+class TestPackagingDataFiles(unittest.TestCase):
+    """打包 datas 必须覆盖冻结态会读的非 .py 资源。
+
+    漏一个的失败模式是静默的：代码能跑、单元测试全绿，但 exe 一 init 就
+    「文件不存在：_MEIxxxx/kv/core/schema.sql」—— schema.sql 曾正是这样漏的，
+    导致两个 exe 都无法初始化 vault（只有真跑 exe 才会发现）。
+    冻结态的路径解析都基于 __file__（_MEIPASS 下同构），所以 datas 的目标
+    目录必须与仓库内相对路径一致。
+    """
+
+    REQUIRED = ("kv/core/schema.sql", "tests/corpus")
+
+    def test_spec_bundles_runtime_data_files(self):
+        spec = (ROOT / "packaging" / "kv.spec").read_text(encoding="utf-8")
+        blocks = re.findall(r"datas=\[(.*?)\]", spec, re.S)
+        self.assertGreaterEqual(len(blocks), 2, "spec 应有两个独立 Analysis（GUI 与 CLI）")
+        for index, block in enumerate(blocks, 1):
+            for needle in self.REQUIRED:
+                self.assertIn(needle, block, f"第 {index} 个 Analysis 的 datas 缺少 {needle}")
+
+    def test_data_files_exist_in_repo(self):
+        for relative in self.REQUIRED:
+            self.assertTrue((ROOT / relative).exists(), f"{relative} 不存在，spec 会打包失败")
+
+
 if __name__ == "__main__":
     unittest.main()

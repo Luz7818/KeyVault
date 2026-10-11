@@ -12,7 +12,14 @@ a = Analysis(
     ['../kv_gui.py'],
     pathex=[],
     binaries=[],
-    datas=[('icon.png', 'packaging')],
+    datas=[
+        ('icon.png', 'packaging'),
+        # 冻结态运行时会按 __file__ 相对路径找这两个：DB 的 schema 与 golden 语料。
+        # 漏掉的失败模式是静默的 —— 代码能跑、单测全绿，exe 一 init / selftest
+        # 就「文件不存在：_MEIxxxx/kv/core/schema.sql」。tests/test_arch.py 有断言守着。
+        ('../kv/core/schema.sql', 'kv/core'),
+        ('../tests/corpus', 'tests/corpus'),
+    ],
     hiddenimports=[
         'kv.cli',
         'kv.gui.pages.secrets',
@@ -59,7 +66,10 @@ cli_a = Analysis(
     ['../kv.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[
+        ('../kv/core/schema.sql', 'kv/core'),
+        ('../tests/corpus', 'tests/corpus'),
+    ],
     hiddenimports=['kv.cli'],
     hookspath=[],
     hooksconfig={},
