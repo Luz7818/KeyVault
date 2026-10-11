@@ -25,7 +25,7 @@ class SettingsPage(ttk.Frame):
         info_card = Card(self)
         info_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._info = tk.Text(
-            info_card.body, height=16, font=theme.FONT_MONO, state="disabled",
+            info_card.body, height=10, font=theme.FONT_MONO, state="disabled",
             bg=theme.SURFACE, wrap="word", padx=theme.PAD, pady=theme.PAD,
             fg=theme.TEXT, relief="flat", bd=0, highlightthickness=0,
         )

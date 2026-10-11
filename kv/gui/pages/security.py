@@ -12,7 +12,8 @@ from kv.gui.widgets import DataTable, PageHeader
 
 SCAN_COLS = ("path", "line_no", "name", "platform", "status")
 SCAN_HEADS = ("文件", "行号", "密钥", "平台", "状态")
-SCAN_WIDTHS = (280, 50, 120, 100, 70)
+# 文件列给足宽度：Windows 绝对路径常 60+ 字符，截断会让行号/记录名对不上现场
+SCAN_WIDTHS = (430, 50, 120, 100, 70)
 
 AUDIT_COLS = ("id", "ts", "event", "actor", "name_snapshot", "sha256_prefix")
 AUDIT_HEADS = ("ID", "时间", "事件", "操作者", "记录名", "sha256")

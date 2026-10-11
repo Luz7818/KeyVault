@@ -6,6 +6,8 @@ corrections 持久化用户纠正规则。
 
 from __future__ import annotations
 
+import contextlib
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +23,12 @@ from kv.ops import fix as fixops
 from kv.ops import save as saveops
 
 SECRET = "sk-" + "A" * 44 + "c31f"
+
+
+def _quiet(call):
+    """ops 层直接调用会 console.ok —— 捕获住，别让测试输出泄漏到报告里。"""
+    with contextlib.redirect_stdout(io.StringIO()):
+        return call()
 
 
 def _make_store(vault_dir: Path) -> VaultStore:
@@ -136,7 +144,7 @@ class TestSetPlatform(unittest.TestCase):
         """--remember keyname 持久化一条纠正规则。"""
         _add_secret(self.store, "ds", confidence="ambiguous",
                      key_name="DEEPSEEK_API_KEY")
-        fixops.set_platform(self.store, "ds", "deepseek", remember="keyname")
+        _quiet(lambda: fixops.set_platform(self.store, "ds", "deepseek", remember="keyname"))
         corrections = fixops.list_corrections(self.store)
         self.assertEqual(len(corrections), 1)
         self.assertEqual(corrections[0]["kind"], "keyname")
@@ -172,7 +180,7 @@ class TestDropCorrection(unittest.TestCase):
     def test_drop_existing_correction(self):
         _add_secret(self.store, "ds", confidence="ambiguous",
                      key_name="DEEPSEEK_API_KEY")
-        fixops.set_platform(self.store, "ds", "deepseek", remember="keyname")
+        _quiet(lambda: fixops.set_platform(self.store, "ds", "deepseek", remember="keyname"))
         corrections = fixops.list_corrections(self.store)
         self.assertEqual(len(corrections), 1)
         fixops.drop_correction(self.store, corrections[0]["id"])

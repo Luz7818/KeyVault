@@ -45,7 +45,7 @@ def inject(
 
     target = target.resolve()
     if not force:
-        _check_git_safety(target)
+        _check_git_safety(target, gitignore=gitignore)
     if gitignore:
         _ensure_gitignore(target)
 
@@ -160,8 +160,13 @@ def _derive_var_name(record_name: str) -> str:
     return record_name.replace("-", "_").upper()
 
 
-def _check_git_safety(target: Path) -> None:
-    """目标在 git 工作树里且 .env 被跟踪 → 拒绝。"""
+def _check_git_safety(target: Path, *, gitignore: bool = False) -> None:
+    """目标在 git 工作树里且 .env 被跟踪 → 拒绝。
+
+    --gitignore 也救不了它：文件已被跟踪说明已经进过历史，加 ignore 规则
+    只是让未来的改动不再被跟踪，密钥本体还躺在提交里 —— 所以提示语要给
+    真正有效的出路（移出版本控制），而不是让用户绕回已经给过的旗标。
+    """
     git_dir = _find_git_root(target.parent)
     if git_dir is None:
         return  # 不在 git 工作树里，安全
@@ -177,7 +182,8 @@ def _check_git_safety(target: Path) -> None:
         if result.returncode == 0:
             raise errors.RefusedError(
                 f"{target} 被 git 跟踪 —— 密钥不该进版本控制",
-                hint="加 --force 强行写入，或把 .env 加进 .gitignore",
+                hint="gitignore 救不了已跟踪的文件（历史里还有）。"
+                     "先 git rm --cached 把它移出版本控制再重试；确要写入加 --force",
             )
     except FileNotFoundError:
         pass  # git 不在 PATH 上，跳过检查
