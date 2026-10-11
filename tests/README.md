@@ -18,6 +18,7 @@ tests 包含 kv 项目的全部测试：单元测试、集成测试、CLI 端到
 | `test_cli_m4.py` | M4 验收：scan/audit/expire/purge 端到端 | — |
 | `test_cli_backup.py` | export/restore 端到端：口令校验、跨库恢复、去重 | — |
 | `test_gui_tabbar.py` | TabBar 堆叠序回归：初始标签内容必须可见 | 需要显示环境（无则 skip） |
+| `bench_scan.py` | `kv scan` 性能基准：造 N 条密钥的 vault + 目录树并计时 | 不进 discover（名字不以 test 开头）；数字口径见 AGENTS |
 | `test_console.py` | console 模块：表格输出、掩码渲染、用户交互 | — |
 | `test_capture_watch.py` | watch 循环：自动检测、手动操作、spool 模式 | — |
 | `test_capture_wipe.py` | 剪贴板擦除：定时、sweep、wipe helper | — |
