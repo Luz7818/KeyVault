@@ -288,6 +288,9 @@ class TabBar(ttk.Frame):
         if not self._current:
             self._current = key
         self._relayout()
+        # place 的堆叠序 = 创建序，后注册的会盖住当前页——每次 add 都把
+        # 当前页重新抬到顶，初始页才能在整个构建过程结束后仍然可见
+        self._items[self._current]["frame"].tkraise()
         return inner
 
     def select(self, key: str) -> None:
