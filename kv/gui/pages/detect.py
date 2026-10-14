@@ -25,7 +25,7 @@ def _lines_height(lines: int) -> int:
 
 class DetectPage(ttk.Frame):
     def __init__(self, parent: tk.Widget, *, app) -> None:
-        super().__init__(parent, padding=theme.PAD)
+        super().__init__(parent, padding=theme.PAD, style="Page.TFrame")
         self._app = app
         self._build()
 
@@ -41,9 +41,11 @@ class DetectPage(ttk.Frame):
         RoundButton(st_bar, "运行 selftest --golden", self._run_selftest).pack(side="left")
         self._gate_label = ttk.Label(st_bar, text="", font=theme.FONT_SMALL)
         self._gate_label.pack(side="left", padx=theme.PAD)
-        ttk.Label(self, text="规则自测", style="Sub.TLabel").pack(side="bottom", anchor="w")
+        ttk.Label(self, text="规则自测", style="PageSub.TLabel").pack(
+            side="bottom", anchor="w",
+        )
 
-        ttk.Label(self, text="输入文本", style="Sub.TLabel").pack(anchor="w")
+        ttk.Label(self, text="输入文本", style="PageSub.TLabel").pack(anchor="w")
         input_card = Card(self, height=_lines_height(6))
         input_card.pack(fill="x", pady=(theme.PAD_SM, 0))
         self._text = tk.Text(
@@ -52,12 +54,15 @@ class DetectPage(ttk.Frame):
             padx=theme.PAD_SM, pady=theme.PAD_SM,
         )
         self._text.pack(fill="both", expand=True, padx=1, pady=1)
-        bar = ttk.Frame(self)
+        bar = ttk.Frame(self, style="Page.TFrame")
         bar.pack(fill="x", pady=(theme.GAP, 0))
-        RoundButton(bar, "检测文本", self._detect_text, kind="accent").pack(side="left")
-        RoundButton(bar, "检测文件", self._detect_file).pack(side="left", padx=theme.GAP)
-        RoundButton(bar, "清空", lambda: self._text.delete("1.0", "end")).pack(side="left")
-        ttk.Label(self, text="检测结果", style="Sub.TLabel").pack(
+        RoundButton(bar, "检测文本", self._detect_text, kind="accent",
+                    parent_bg=theme.CANVAS).pack(side="left")
+        RoundButton(bar, "检测文件", self._detect_file,
+                    parent_bg=theme.CANVAS).pack(side="left", padx=theme.GAP)
+        RoundButton(bar, "清空", lambda: self._text.delete("1.0", "end"),
+                    parent_bg=theme.CANVAS).pack(side="left")
+        ttk.Label(self, text="检测结果", style="PageSub.TLabel").pack(
             anchor="w", pady=(theme.GAP, 0),
         )
         result_card = Card(self)

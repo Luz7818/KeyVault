@@ -14,7 +14,7 @@ from kv.gui.widgets import PageHeader
 
 class SettingsPage(ttk.Frame):
     def __init__(self, parent: tk.Widget, *, app) -> None:
-        super().__init__(parent, padding=theme.PAD_LG)
+        super().__init__(parent, padding=theme.PAD_LG, style="Page.TFrame")
         self._app = app
         self._build()
 
@@ -30,13 +30,19 @@ class SettingsPage(ttk.Frame):
             fg=theme.TEXT, relief="flat", bd=0, highlightthickness=0,
         )
         self._info.pack(fill="both", expand=True, padx=1, pady=1)
-        bar = ttk.Frame(self)
+        bar = ttk.Frame(self, style="Page.TFrame")
         bar.pack(fill="x", pady=(theme.PAD, 0))
-        RoundButton(bar, "初始化 Vault", self._do_init, kind="accent").pack(side="left", padx=(0, theme.GAP))
-        RoundButton(bar, "健康检查", self._do_doctor).pack(side="left", padx=(0, theme.GAP))
-        RoundButton(bar, "刷新", self._refresh).pack(side="left", padx=(0, theme.GAP))
-        RoundButton(bar, "关于", self._show_about).pack(side="left")
-        self._settings_frame = ttk.LabelFrame(self, text="配置项", padding=theme.PAD)
+        RoundButton(bar, "初始化 Vault", self._do_init, kind="accent",
+                    parent_bg=theme.CANVAS).pack(side="left", padx=(0, theme.GAP))
+        RoundButton(bar, "健康检查", self._do_doctor,
+                    parent_bg=theme.CANVAS).pack(side="left", padx=(0, theme.GAP))
+        RoundButton(bar, "刷新", self._refresh,
+                    parent_bg=theme.CANVAS).pack(side="left", padx=(0, theme.GAP))
+        RoundButton(bar, "关于", self._show_about,
+                    parent_bg=theme.CANVAS).pack(side="left")
+        self._settings_frame = ttk.LabelFrame(
+            self, text="配置项", padding=theme.PAD, style="Page.TLabelframe",
+        )
         self._settings_frame.pack(fill="x", pady=(theme.PAD, 0))
         self._setting_vars: dict[str, tk.StringVar] = {}
         self._build_settings()
@@ -47,21 +53,23 @@ class SettingsPage(ttk.Frame):
         self._setting_vars.clear()
         store = self._app.store
         if store is None:
-            ttk.Label(self._settings_frame, text="vault 未初始化").pack()
+            ttk.Label(self._settings_frame, text="vault 未初始化",
+                      style="PageSub.TLabel").pack()
             return
         keys = ["mask_char"]
         for i, key in enumerate(keys):
-            ttk.Label(self._settings_frame, text=key, style="Sub.TLabel").grid(
+            ttk.Label(self._settings_frame, text=key, style="PageSub.TLabel").grid(
                 row=i, column=0, sticky="w", pady=2,
             )
             var = tk.StringVar(value=store.get_setting(key, ""))
             self._setting_vars[key] = var
-            RoundEntry(self._settings_frame, textvariable=var, width=180).grid(
+            RoundEntry(self._settings_frame, textvariable=var, width=180,
+                       parent_bg=theme.CANVAS).grid(
                 row=i, column=1, sticky="w", pady=2, padx=(theme.GAP, 0),
             )
         # 界面缩放：字型/间距整体放大的用户开关，重启生效
         row = len(keys)
-        ttk.Label(self._settings_frame, text="界面缩放", style="Sub.TLabel").grid(
+        ttk.Label(self._settings_frame, text="界面缩放", style="PageSub.TLabel").grid(
             row=row, column=0, sticky="w", pady=(theme.PAD_SM, 0),
         )
         self._ui_scale_var = tk.StringVar(value=store.get_setting("ui_scale", "1.0") or "1.0")
@@ -70,7 +78,7 @@ class SettingsPage(ttk.Frame):
             state="readonly", values=("1.0", "1.1", "1.25", "1.5"),
         )
         cb.grid(row=row, column=1, sticky="w", pady=(theme.PAD_SM, 0), padx=(theme.GAP, 0))
-        ttk.Label(self._settings_frame, text="重启后生效", style="Muted.TLabel").grid(
+        ttk.Label(self._settings_frame, text="重启后生效", style="PageMuted.TLabel").grid(
             row=row, column=2, sticky="w", padx=(theme.GAP, 0),
         )
         ttk.Button(self._settings_frame, text="保存", command=self._save_settings).grid(

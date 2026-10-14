@@ -22,7 +22,7 @@ AUDIT_WIDTHS = (40, 150, 100, 60, 120, 100)
 
 class SecurityPage(ttk.Frame):
     def __init__(self, parent: tk.Widget, *, app) -> None:
-        super().__init__(parent, padding=theme.PAD)
+        super().__init__(parent, padding=theme.PAD, style="Page.TFrame")
         self._app = app
         self._build()
 
@@ -30,9 +30,11 @@ class SecurityPage(ttk.Frame):
         PageHeader(self, "安全", "泄露扫描、审计溯源、过期清除").pack(
             anchor="w", pady=(0, theme.GAP),
         )
-        nb = TabBar(self)
+        nb_card = Card(self)
+        nb_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        nb = TabBar(nb_card.body)
+        nb.pack(fill="both", expand=True)
         self._nb = nb
-        nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._scan_tab = nb.add("scan", "泄露扫描")
         self._audit_tab = nb.add("audit", "审计日志")
         self._maint_tab = nb.add("maint", "过期 / 清除")
@@ -51,7 +53,7 @@ class SecurityPage(ttk.Frame):
         )
         RoundButton(bar, "浏览", self._pick_dir).pack(side="left", padx=theme.GAP)
         RoundButton(bar, "扫描", self._do_scan, kind="accent").pack(side="left")
-        scan_card = Card(self._scan_tab)
+        scan_card = Card(self._scan_tab, parent_bg=theme.SURFACE)
         scan_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._scan_table = DataTable(
             scan_card.body, SCAN_COLS, headings=SCAN_HEADS, widths=SCAN_WIDTHS,
@@ -75,7 +77,7 @@ class SecurityPage(ttk.Frame):
         name_entry = RoundEntry(bar, textvariable=self._audit_name, width=160)
         name_entry.pack(side="left")
         name_entry.entry.bind("<KeyRelease>", lambda _e: self._apply_audit_filter())
-        audit_card = Card(self._audit_tab)
+        audit_card = Card(self._audit_tab, parent_bg=theme.SURFACE)
         audit_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._audit_table = DataTable(
             audit_card.body, AUDIT_COLS, headings=AUDIT_HEADS, widths=AUDIT_WIDTHS,

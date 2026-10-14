@@ -22,7 +22,7 @@ FIX_WIDTHS = (140, 120, 80, 200)
 
 class CapturePage(ttk.Frame):
     def __init__(self, parent: tk.Widget, *, app) -> None:
-        super().__init__(parent, padding=theme.PAD)
+        super().__init__(parent, padding=theme.PAD, style="Page.TFrame")
         self._app = app
         self._watch_stop = threading.Event()
         self._watch_thread: threading.Thread | None = None
@@ -32,8 +32,11 @@ class CapturePage(ttk.Frame):
         PageHeader(self, "捕获", "剪贴板监听——候选先进审批队列，接受后才入库").pack(
             anchor="w", pady=(0, theme.GAP),
         )
-        nb = TabBar(self)
-        nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        # TabBar 坐在一张圆角白卡里：pill 导航条 + 内容纸面成一个整体
+        nb_card = Card(self)
+        nb_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        nb = TabBar(nb_card.body)
+        nb.pack(fill="both", expand=True)
         self._nb = nb
         self._watch_tab = nb.add("watch", "剪贴板监控")
         self._review_tab = nb.add("review", "审批队列")
@@ -52,7 +55,7 @@ class CapturePage(ttk.Frame):
         )
         self._watch_btn.pack(side="left")
         RoundButton(bar, "清扫过期", self._do_sweep).pack(side="left", padx=theme.GAP)
-        watch_card = Card(self._watch_tab)
+        watch_card = Card(self._watch_tab, parent_bg=theme.SURFACE)
         watch_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._watch_log = tk.Listbox(
             watch_card.body, font=theme.FONT_SMALL, height=14,
@@ -61,6 +64,7 @@ class CapturePage(ttk.Frame):
             activestyle="none",
         )
         self._watch_log.pack(fill="both", expand=True, padx=1, pady=1)
+        theme.flat(self._watch_log)
 
     def _build_review(self) -> None:
         bar = ttk.Frame(self._review_tab)
@@ -73,7 +77,7 @@ class CapturePage(ttk.Frame):
         RoundButton(
             bar, "接受全部（高置信）", self._accept_all, kind="accent",
         ).pack(side="left", padx=theme.GAP)
-        review_card = Card(self._review_tab)
+        review_card = Card(self._review_tab, parent_bg=theme.SURFACE)
         review_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._review_list = tk.Listbox(
             review_card.body, font=theme.FONT_SMALL, height=12,
@@ -82,6 +86,7 @@ class CapturePage(ttk.Frame):
             activestyle="none",
         )
         self._review_list.pack(fill="both", expand=True, padx=1, pady=1)
+        theme.flat(self._review_list)
         self._review_items: list[Any] = []
 
     def _build_fix(self) -> None:

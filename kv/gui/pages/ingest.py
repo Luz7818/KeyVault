@@ -13,7 +13,7 @@ from kv.gui.widgets import FormDialog, PageHeader
 
 class IngestPage(ttk.Frame):
     def __init__(self, parent: tk.Widget, *, app) -> None:
-        super().__init__(parent, padding=theme.PAD)
+        super().__init__(parent, padding=theme.PAD, style="Page.TFrame")
         self._app = app
         self._build()
 
@@ -21,9 +21,11 @@ class IngestPage(ttk.Frame):
         PageHeader(self, "批量操作", "从 .env / CSV 批量导入，注入或轮换").pack(
             anchor="w", pady=(0, theme.GAP),
         )
-        nb = TabBar(self)
+        nb_card = Card(self)
+        nb_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        nb = TabBar(nb_card.body)
+        nb.pack(fill="both", expand=True)
         self._nb = nb
-        nb.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._import_tab = nb.add("import", "导入")
         self._inject_tab = nb.add("inject", "注入 .env")
         self._rotate_tab = nb.add("rotate", "轮换 / 吊销")
@@ -47,7 +49,7 @@ class IngestPage(ttk.Frame):
         self._import_force = tk.BooleanVar(value=False)
         ttk.Checkbutton(opts, text="强制（跳过不可信判定）", variable=self._import_force).pack(side="left", padx=theme.PAD)
         RoundButton(self._import_tab, "导入", self._do_import, kind="accent").pack(pady=theme.PAD, anchor="w")
-        result_card = Card(self._import_tab)
+        result_card = Card(self._import_tab, parent_bg=theme.SURFACE)
         result_card.pack(fill="both", expand=True)
         self._import_result = tk.Text(
             result_card.body, height=8, font=theme.FONT_MONO, state="disabled",

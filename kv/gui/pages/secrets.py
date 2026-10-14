@@ -13,12 +13,16 @@ from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
 COLUMNS = ("name", "platform", "status", "preview", "created_at")
 HEADINGS = ("名称", "平台", "状态", "预览", "创建时间")
-WIDTHS = (155, 120, 80, 205, 165)
+WIDTHS = (170, 155, 80, 190, 160)
+
+
+def _px(base: int) -> int:
+    return max(round(base * theme.SCALE), 1)
 
 
 class SecretsPage(ttk.Frame):
     def __init__(self, parent: tk.Widget, *, app) -> None:
-        super().__init__(parent, padding=theme.PAD)
+        super().__init__(parent, padding=theme.PAD, style="Page.TFrame")
         self._app = app
         self._rows: list[Any] = []
         self._build()
@@ -44,20 +48,25 @@ class SecretsPage(ttk.Frame):
         self._build_menu()
 
     def _build_empty_state(self) -> None:
-        """空态引导卡：未初始化 → 一键建库；空库 → 添加或去捕获。"""
+        """空态引导卡：插图 + 未初始化 → 一键建库；空库 → 添加或去捕获。"""
         self._empty = Card(self)
         body = self._empty.body
+        self._art = tk.Canvas(
+            body, width=_px(72), height=_px(72), bg=theme.SURFACE,
+            highlightthickness=0, bd=0,
+        )
+        self._art.pack(pady=(theme.PAD_LG, theme.PAD_SM))
         self._empty_title = tk.Label(
             body, text="", font=theme.FONT_HEADING, bg=theme.SURFACE, fg=theme.TEXT,
         )
-        self._empty_title.pack(anchor="w", padx=theme.PAD, pady=(theme.PAD_LG, 0))
+        self._empty_title.pack(anchor="center")
         self._empty_hint = tk.Label(
             body, text="", font=theme.FONT, bg=theme.SURFACE,
-            fg=theme.TEXT_SECONDARY, justify="left",
+            fg=theme.TEXT_SECONDARY, justify="center",
         )
-        self._empty_hint.pack(anchor="w", padx=theme.PAD, pady=(theme.PAD_SM, 0))
+        self._empty_hint.pack(anchor="center", pady=(theme.PAD_SM, 0))
         row = tk.Frame(body, bg=theme.SURFACE)
-        row.pack(anchor="w", padx=theme.PAD, pady=theme.PAD)
+        row.pack(anchor="center", pady=theme.PAD)
         self._empty_btn1 = RoundButton(row, "", self._on_add, kind="accent")
         self._empty_btn1.pack(side="left")
         self._empty_btn2 = RoundButton(row, "", lambda: self._app.show_page("capture"))
@@ -66,12 +75,15 @@ class SecretsPage(ttk.Frame):
         self._empty_btn3.pack(side="left", padx=(theme.GAP, 0))
 
     def _build_toolbar(self) -> None:
-        bar = ttk.Frame(self)
+        bar = ttk.Frame(self, style="Page.TFrame")
         bar.pack(fill="x")
         self._search = tk.StringVar()
         self._search.trace_add("write", lambda *_: self.refresh())
-        RoundEntry(bar, textvariable=self._search, width=260).pack(side="left")
-        ttk.Label(bar, text="搜索", style="Sub.TLabel").pack(side="left", padx=(8, theme.PAD))
+        RoundEntry(bar, textvariable=self._search, width=260,
+                   parent_bg=theme.CANVAS).pack(side="left")
+        ttk.Label(bar, text="搜索", style="PageSub.TLabel").pack(
+            side="left", padx=(8, theme.PAD),
+        )
         self._status_filter = tk.StringVar(value="")
         cb = ttk.Combobox(
             bar, textvariable=self._status_filter, width=8, state="readonly",
@@ -79,9 +91,13 @@ class SecretsPage(ttk.Frame):
         )
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", lambda _: self.refresh())
-        ttk.Label(bar, text="状态", style="Sub.TLabel").pack(side="left", padx=(8, theme.PAD))
-        RoundButton(bar, "添加", self._on_add, kind="accent").pack(side="right")
-        RoundButton(bar, "刷新", self.refresh).pack(side="right", padx=(0, theme.GAP))
+        ttk.Label(bar, text="状态", style="PageSub.TLabel").pack(
+            side="left", padx=(8, theme.PAD),
+        )
+        RoundButton(bar, "添加", self._on_add, kind="accent",
+                    parent_bg=theme.CANVAS).pack(side="right")
+        RoundButton(bar, "刷新", self.refresh,
+                    parent_bg=theme.CANVAS).pack(side="right", padx=(0, theme.GAP))
 
     def _build_menu(self) -> None:
         self._menu = tk.Menu(self, tearoff=0)
@@ -143,6 +159,19 @@ class SecretsPage(ttk.Frame):
             ), tags=(tag,))
         self._app.set_status(f"{len(self._rows)} 条记录")
 
+    def _draw_art(self) -> None:
+        """空态插图：主色浅底圆 + 钥匙线稿。"""
+        from kv.gui import icons
+
+        c = self._art
+        c.delete("all")
+        s = _px(72)
+        c.create_oval(
+            _px(4), _px(4), s - _px(4), s - _px(4),
+            fill=theme.ACCENT_SOFT, outline="",
+        )
+        icons.draw_key(c, s / 2, s / 2, _px(30), theme.ACCENT)
+
     def _show_empty(self, mode: str) -> None:
         """空态引导：mode = uninitialized / empty。"""
         texts = {
@@ -158,6 +187,7 @@ class SecretsPage(ttk.Frame):
             ),
         }
         title, hint, b1, b2, b3 = texts[mode]
+        self._draw_art()
         self._empty_title.config(text=title)
         self._empty_hint.config(text=hint)
         self._empty_btn1.set_text(b1)
