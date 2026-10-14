@@ -42,7 +42,8 @@ class Palette(tk.Toplevel):
         self.configure(bg=theme.BORDER_STRONG, bd=1)
         self._input_var = tk.StringVar()
         self._input_var.trace_add("write", lambda *_: self._refresh())
-        self._input = RoundEntry(self, textvariable=self._input_var, width=560)
+        self._input = RoundEntry(self, textvariable=self._input_var, width=560,
+                                 parent_bg=theme.BORDER_STRONG)
         self._input.pack(fill="x", padx=theme.PAD_SM, pady=theme.PAD_SM)
         self._input.entry.bind("<Up>", lambda e: self._move(-1))
         self._input.entry.bind("<Down>", lambda e: self._move(1))

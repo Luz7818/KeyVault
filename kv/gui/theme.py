@@ -16,38 +16,43 @@ from tkinter import ttk
 
 # ---------------------------------------------------------------- 色板
 BG = "#f4f5f7"            # 窗口衬底（对话框、边缘）
-SURFACE = "#ffffff"       # 内容区纸面
+CANVAS = "#f2f3f8"        # 页面画布：内容区的浅灰底，白卡片浮在它上面
+SURFACE = "#ffffff"       # 卡片纸面
 CONTENT_BG = SURFACE      # 兼容旧引用：内容区背景
-BORDER = "#e4e7ee"        # 1px 描边
-BORDER_STRONG = "#cbd2de"
-TABLE_HEADER_BG = "#f8f9fb"
-TABLE_ALT_BG = "#fafbfd"  # 斑马纹
-TABLE_SELECT_BG = "#eef2ff"
-HOVER_BG = "#f1f3f9"
+BORDER = "#e5e8f0"        # 1px 描边（浅，分隔线）
+BORDER_STRONG = "#d4d9e4" # 卡片描边（比 BORDER 深半档，白卡在灰底上的轮廓）
+TABLE_HEADER_BG = "#f8f9fc"
+TABLE_ALT_BG = "#fafbfd"  # 斑马纹（已退役，保留令牌防外部引用）
+TABLE_SELECT_BG = "#e9eeff"
+HOVER_BG = "#f2f4fb"
 PRESS_BG = "#e6eaf4"
 
 # 主色与语义色
 ACCENT = "#3d5fe8"
 ACCENT_HOVER = "#2f4fd6"
 ACCENT_ACTIVE = "#2743b8"
-ACCENT_SOFT = "#eef2ff"
+ACCENT_SOFT = "#e9eeff"
 ERROR = "#d92d20"
 ERROR_SOFT = "#fee4e2"
 WARNING = "#d97706"
 SUCCESS = "#12805c"
 
-TEXT = "#1f2430"
-TEXT_SECONDARY = "#667085"
-TEXT_TERTIARY = "#98a2b3"
+TEXT = "#1c2230"
+TEXT_SECONDARY = "#5f6b81"
+TEXT_TERTIARY = "#9aa3b5"
 
-# 侧边栏（深墨蓝）
-SIDEBAR_BG = "#141821"
+# 侧边栏（深墨蓝，垂直渐变从 TOP 到底 BOTTOM）
+SIDEBAR_TOP = "#10141d"
+SIDEBAR_BOTTOM = "#1b2233"
+SIDEBAR_BG = "#141821"    # 兼容旧引用：取渐变中值
 SIDEBAR_FG = "#9aa4b8"
-SIDEBAR_HOVER_FG = "#c9d2e3"
-SIDEBAR_ACTIVE_BG = "#222a3a"
+SIDEBAR_HOVER_FG = "#d4dcec"
+SIDEBAR_ACTIVE_BG = "#232c40"
 SIDEBAR_ACTIVE_FG = "#ffffff"
 SIDEBAR_INDICATOR = ACCENT
 SIDEBAR_MUTED = "#5d6575"
+SIDEBAR_SECTION = "#6b7488"   # 分组小标题（比正文更暗更小）
+SIDEBAR_HAIRLINE = "#242b3b"  # 侧边栏内的分隔线
 
 # ---------------------------------------------------------------- 字体
 FONT_FAMILY = "Microsoft YaHei UI"
@@ -201,6 +206,7 @@ def setup_style() -> None:
     _notebook(style)
     _tree_and_scrollbars(style)
     _cards_and_choices(style)
+    _page(style)
 
 
 def _base(style: ttk.Style) -> None:
@@ -223,6 +229,24 @@ def _base(style: ttk.Style) -> None:
     style.configure("Muted.TLabel", foreground=TEXT_TERTIARY)
     style.configure("Muted.TFrame TLabel", background=BG)
     style.configure("Accent.TLabel", foreground=ACCENT)
+
+
+def _page(style: ttk.Style) -> None:
+    """页面画布层：页面与页头坐在浅灰 CANVAS 上，白卡片浮起——这是
+    「卡片有层次」的来源，全部白底会让卡片只剩 1px 描边可用。"""
+    style.configure("Page.TFrame", background=CANVAS)
+    style.configure("Page.TLabel", background=CANVAS, foreground=TEXT)
+    style.configure("PageSub.TLabel", background=CANVAS, foreground=TEXT_SECONDARY)
+    style.configure("PageMuted.TLabel", background=CANVAS, foreground=TEXT_TERTIARY)
+    style.configure("PageHeading.TLabel", background=CANVAS, font=FONT_HEADING)
+    style.configure(
+        "Page.TLabelframe", background=CANVAS, bordercolor=BORDER,
+        relief="flat", borderwidth=1,
+    )
+    style.configure(
+        "Page.TLabelframe.Label", background=CANVAS,
+        foreground=TEXT_SECONDARY, font=FONT_SUBTITLE,
+    )
 
 
 def _buttons(style: ttk.Style) -> None:

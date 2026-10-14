@@ -11,7 +11,11 @@ from kv.gui.controls import RoundButton, SlimScrollbar
 
 
 class DataTable(ttk.Frame):
-    """带列排序的 Treeview 表格。"""
+    """带列排序的 Treeview 表格：纯白行 + hover 高亮 + 柔和选中。
+
+    主动放弃斑马纹——斑马与 hover/选中叠加时 tag 优先级互相踩，且现代
+    表格语言（Linear/Notion 式）是纯白行靠 hover 提供反馈。
+    """
 
     def __init__(
         self,
@@ -29,6 +33,7 @@ class DataTable(ttk.Frame):
         self._on_right_click = on_right_click
         self._sort_col: str | None = None
         self._sort_rev = False
+        self._hover_item: str | None = None
         self._build(headings or columns, widths)
 
     def _build(self, headings: Sequence[str], widths: Sequence[int] | None) -> None:
@@ -45,20 +50,22 @@ class DataTable(ttk.Frame):
             self.tree.heading(col, text=headings[i], command=lambda c=col: self._sort_by(c))
             w = widths[i] if widths and i < len(widths) else 120
             self.tree.column(col, width=w, minwidth=60)
-        self.tree.tag_configure("odd", background=theme.TABLE_ALT_BG)
-        self.tree.tag_configure("even", background=theme.CONTENT_BG)
+        self.tree.tag_configure("hover", background=theme.HOVER_BG)
+        self.tree.bind("<Motion>", self._on_motion)
+        self.tree.bind("<Leave>", lambda _e: self._clear_hover())
+        # 点选后该行交回选中色——hover 底色不能压住选中底色
+        self.tree.bind("<<TreeviewSelect>>", lambda _e: self._clear_hover())
         if self._on_double:
             self.tree.bind("<Double-1>", self._handle_double)
         if self._on_right_click:
             self.tree.bind("<Button-3>", self._handle_right_click)
 
     def clear(self) -> None:
+        self._hover_item = None
         self.tree.delete(*self.tree.get_children())
 
     def insert_row(self, values: Sequence[Any], *, tags: Sequence[str] = ()) -> str:
-        idx = len(self.tree.get_children())
-        row_tags = list(tags) + ["odd" if idx % 2 else "even"]
-        return self.tree.insert("", "end", values=values, tags=row_tags)
+        return self.tree.insert("", "end", values=values, tags=tuple(tags))
 
     def selected_row(self) -> dict[str, Any] | None:
         sel = self.tree.selection()
@@ -66,6 +73,25 @@ class DataTable(ttk.Frame):
             return None
         vals = self.tree.item(sel[0], "values")
         return dict(zip(self._columns, vals))
+
+    def _on_motion(self, event: tk.Event) -> None:
+        item = self.tree.identify_row(event.y)
+        if item == self._hover_item:
+            return
+        self._clear_hover()
+        if item and item not in self.tree.selection():
+            self._hover_item = item
+            self.tree.item(item, tags=(*self.tree.item(item, "tags"), "hover"))
+
+    def _clear_hover(self) -> None:
+        if not self._hover_item:
+            return
+        try:
+            tags = tuple(t for t in self.tree.item(self._hover_item, "tags") if t != "hover")
+            self.tree.item(self._hover_item, tags=tags)
+        except tk.TclError:
+            pass  # 行已被清空
+        self._hover_item = None
 
     def _sort_by(self, col: str) -> None:
         self._sort_rev = not self._sort_rev if self._sort_col == col else False
@@ -166,23 +192,36 @@ class FormDialog(tk.Toplevel):
 
 
 class PageHeader(ttk.Frame):
-    """页头：大标题 + 一行副标题，全应用统一的页面开场。"""
+    """页头：大标题 + 一行副标题，全应用统一的页面开场。坐在画布色上。"""
 
     def __init__(self, parent: tk.Widget, title: str, subtitle: str = "") -> None:
-        super().__init__(parent, style="TFrame")
-        ttk.Label(self, text=title, style="Heading.TLabel").pack(anchor="w")
+        super().__init__(parent, style="Page.TFrame")
+        ttk.Label(self, text=title, style="PageHeading.TLabel").pack(anchor="w")
         if subtitle:
-            ttk.Label(self, text=subtitle, style="Sub.TLabel").pack(anchor="w", pady=(2, 0))
+            ttk.Label(self, text=subtitle, style="PageSub.TLabel").pack(anchor="w", pady=(2, 0))
 
 
 class StatusLabel(ttk.Frame):
-    """底部状态栏：1px 上描边 + 状态文字。"""
+    """底部状态栏：1px 上描边 + 状态点 + 状态文字。
+
+    状态点把「最后一条消息的性质」编码成颜色（中性灰 / 成功绿 / 错误红），
+    滚屏里一眼能扫到结果变了没有。
+    """
 
     def __init__(self, parent: tk.Widget):
         super().__init__(parent, height=theme.STATUS_HEIGHT, style="TFrame")
         self.pack(fill="x", side="bottom")
         self.pack_propagate(False)
         ttk.Separator(self, orient="horizontal").pack(fill="x", side="top")
+        self._dot = tk.Canvas(
+            self, width=theme.PAD_SM, height=theme.PAD_SM,
+            bg=theme.SURFACE, highlightthickness=0, bd=0,
+        )
+        self._dot.pack(side="left", padx=(theme.PAD, 0), pady=(theme.PAD_SM, 0))
+        self._dot.create_oval(
+            2, 2, theme.PAD_SM - 2, theme.PAD_SM - 2,
+            fill=theme.TEXT_TERTIARY, outline="",
+        )
         self._label = ttk.Label(
             self, text="就绪", font=theme.FONT_SMALL, anchor="w",
             foreground=theme.TEXT_SECONDARY,
@@ -191,3 +230,8 @@ class StatusLabel(ttk.Frame):
 
     def set(self, text: str, *, color: str = "") -> None:
         self._label.config(text=text, foreground=color or theme.TEXT_SECONDARY)
+        self._dot.delete("all")
+        self._dot.create_oval(
+            2, 2, theme.PAD_SM - 2, theme.PAD_SM - 2,
+            fill=color or theme.TEXT_TERTIARY, outline="",
+        )
