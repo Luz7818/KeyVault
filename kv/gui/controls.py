@@ -59,10 +59,14 @@ class Card(tk.Canvas):
 
 
 class RoundEntry(tk.Canvas):
-    """圆角输入框：Canvas 描边 + 聚焦主色光晕 + 内嵌无边框 Entry。"""
+    """圆角输入框：Canvas 描边 + 聚焦主色光晕 + 内嵌无边框 Entry。
+
+    placeholder 在「未聚焦且值为空」时画在画布上，不进 Entry 本身——
+    所以不会污染 textvariable，搜索框拿它当查询串不会被占位文字干扰。
+    """
 
     def __init__(self, parent: tk.Widget, *, textvariable=None, show: str = "",
-                 width: int = 200, font=None,
+                 width: int = 200, font=None, placeholder: str = "",
                  parent_bg: str = theme.SURFACE) -> None:
         super().__init__(
             parent, width=width, height=theme.CONTROL_HEIGHT,
@@ -72,12 +76,23 @@ class RoundEntry(tk.Canvas):
         self._parent_bg = parent_bg
         self._focused = False
         self._radius = theme.RADIUS
+        self._placeholder = placeholder
+        self._var = textvariable
         self.entry = tk.Entry(
             self, textvariable=textvariable, show=show or "",
             font=self._font, bg=theme.SURFACE, fg=theme.TEXT,
             relief="flat", bd=0, insertbackground=theme.TEXT,
             highlightthickness=0,
         )
+        if textvariable is not None:
+            textvariable.trace_add("write", lambda *_: self._update_placeholder())
+        # 占位符是叠在 Entry 上的 Label——Entry 是窗口项，永远压过画布项，
+        # 画在 Canvas 上的占位文字会被不透明 Entry 整个盖住（实测踩过）。
+        self._ph_label = tk.Label(
+            self.entry, text=placeholder, font=self._font,
+            bg=theme.SURFACE, fg=theme.TEXT_TERTIARY,
+        )
+        self._ph_label.bind("<Button-1>", lambda _e: self.entry.focus_set())
         self._place_entry()
         self.entry.bind("<FocusIn>", lambda e: self._set_focus(True))
         self.entry.bind("<FocusOut>", lambda e: self._set_focus(False))
@@ -125,6 +140,22 @@ class RoundEntry(tk.Canvas):
                 *points, fill=theme.SURFACE, smooth=True,
                 outline=theme.BORDER_STRONG, width=1,
             )
+        if self._placeholder:
+            self._update_placeholder()
+
+    def _entry_value(self) -> str:
+        """var 的 trace 先于 Entry 内部同步触发——读值必须读 var 不读 entry.get()，
+        否则程序化 set 后的第一次重画会拿旧值，占位符闪现。"""
+        return self._var.get() if self._var is not None else self.entry.get()
+
+    def _update_placeholder(self) -> None:
+        """「未聚焦且值为空」才显示；点击占位符也把焦点交给 Entry。"""
+        show = self._placeholder and not self._focused and not self._entry_value()
+        if show:
+            self._ph_label.place(x=2, y=0, relheight=1.0)
+            self._ph_label.lift()
+        else:
+            self._ph_label.place_forget()
 
 
 class TabBar(ttk.Frame):

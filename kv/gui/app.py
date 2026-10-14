@@ -65,12 +65,21 @@ class App(tk.Tk):
         self.bind_all("<Control-equal>", lambda e: self._zoom_by(0.05))
         self.bind_all("<Control-minus>", lambda e: self._zoom_by(-0.05))
         self.bind_all("<Control-k>", lambda e: self._open_palette())
+        self.bind_all("<Control-f>", self._focus_search)
         self.after(50, self._drain_queue)
 
     def _open_palette(self) -> None:
         from kv.gui.palette import open_palette
 
         open_palette(self)
+
+    def _focus_search(self, _event=None) -> str:
+        """Ctrl+F 交给当前页；页面没有搜索框（无 focus_search）就不接。"""
+        page = self._pages.get(self._current)
+        if page is not None and hasattr(page, "focus_search"):
+            page.focus_search()
+            return "break"
+        return ""
 
     def copy_secret_by_name(self, name: str) -> bool:
         """复制一条密钥到剪贴板（命令面板与密钥页共用）。"""

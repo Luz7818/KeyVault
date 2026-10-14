@@ -52,7 +52,7 @@ class TestTabBarStacking(unittest.TestCase):
 
         calls = self._spy_raises()
         bar = TabBar(self.root)
-        bar.pack()
+        bar.pack(fill="both", expand=True)  # 与真实页面一致：内容区要有高度可分
         first = bar.add("a", "甲")
         bar.add("b", "乙")
         bar.add("c", "丙")

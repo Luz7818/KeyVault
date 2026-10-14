@@ -9,7 +9,9 @@ from typing import Any
 from kv.gui import icons, theme
 from kv.gui.controls import Card, RoundButton, RoundEntry
 from kv.gui.detail_window import build_detail_window
+from kv.gui.pages.secrets_states import StateCards
 from kv.gui.statbar import STATUS_LABELS, StatBar
+from kv.gui.tooltip import attach as attach_tooltip
 from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
 COLUMNS = ("name", "platform", "status", "preview", "created_at")
@@ -36,7 +38,13 @@ class SecretsPage(ttk.Frame):
         self._header.pack(anchor="w", pady=(0, theme.GAP))
         self._statbar = StatBar(self)
         self._build_toolbar()
-        self._build_empty_state()
+        self._states = StateCards(
+            self,
+            on_add=self._on_add, on_init=self._app.initialize_vault,
+            go_capture=lambda: self._app.show_page("capture"),
+            go_settings=lambda: self._app.show_page("settings"),
+            clear_filters=self._clear_filters,
+        )
         card = Card(self)
         card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._table = DataTable(
@@ -51,33 +59,7 @@ class SecretsPage(ttk.Frame):
             self._table.tree.tag_configure(f"st-{status}", foreground=color)
         self._table.pack(fill="both", expand=True, padx=1, pady=1)
         self._build_menu()
-
-    def _build_empty_state(self) -> None:
-        """空态引导卡：插图 + 未初始化 → 一键建库；空库 → 添加或去捕获。"""
-        self._empty = Card(self)
-        body = self._empty.body
-        self._art = tk.Canvas(
-            body, width=_px(72), height=_px(72), bg=theme.SURFACE,
-            highlightthickness=0, bd=0,
-        )
-        self._art.pack(pady=(theme.PAD_LG, theme.PAD_SM))
-        self._empty_title = tk.Label(
-            body, text="", font=theme.FONT_HEADING, bg=theme.SURFACE, fg=theme.TEXT,
-        )
-        self._empty_title.pack(anchor="center")
-        self._empty_hint = tk.Label(
-            body, text="", font=theme.FONT, bg=theme.SURFACE,
-            fg=theme.TEXT_SECONDARY, justify="center",
-        )
-        self._empty_hint.pack(anchor="center", pady=(theme.PAD_SM, 0))
-        row = tk.Frame(body, bg=theme.SURFACE)
-        row.pack(anchor="center", pady=theme.PAD)
-        self._empty_btn1 = RoundButton(row, "", self._on_add, kind="accent")
-        self._empty_btn1.pack(side="left")
-        self._empty_btn2 = RoundButton(row, "", lambda: self._app.show_page("capture"))
-        self._empty_btn2.pack(side="left", padx=(theme.GAP, 0))
-        self._empty_btn3 = RoundButton(row, "", lambda: self._app.show_page("settings"))
-        self._empty_btn3.pack(side="left", padx=(theme.GAP, 0))
+        self._bind_keys()
 
     def _build_toolbar(self) -> None:
         bar = ttk.Frame(self, style="Page.TFrame")
@@ -85,11 +67,16 @@ class SecretsPage(ttk.Frame):
         self._toolbar = bar
         self._search = tk.StringVar()
         self._search.trace_add("write", lambda *_: self.refresh())
-        RoundEntry(bar, textvariable=self._search, width=260,
-                   parent_bg=theme.CANVAS).pack(side="left")
+        self._search_entry = RoundEntry(
+            bar, textvariable=self._search, width=300,
+            placeholder="搜索名称 / 平台 / 备注",
+            parent_bg=theme.CANVAS,
+        )
+        self._search_entry.pack(side="left")
         ttk.Label(bar, text="搜索", style="PageSub.TLabel").pack(
             side="left", padx=(8, theme.PAD),
         )
+        attach_tooltip(self._search_entry, "按名称 / 平台 / 备注 / 键名子串搜索")
         self._status_filter = tk.StringVar(value="")
         cb = ttk.Combobox(
             bar, textvariable=self._status_filter, width=8, state="readonly",
@@ -97,13 +84,48 @@ class SecretsPage(ttk.Frame):
         )
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", lambda _: self.refresh())
+        attach_tooltip(cb, "只看某种状态的记录")
         ttk.Label(bar, text="状态", style="PageSub.TLabel").pack(
             side="left", padx=(8, theme.PAD),
         )
-        RoundButton(bar, "添加", self._on_add, kind="accent",
-                    parent_bg=theme.CANVAS).pack(side="right")
-        RoundButton(bar, "刷新", self.refresh,
-                    parent_bg=theme.CANVAS).pack(side="right", padx=(0, theme.GAP))
+        add_btn = RoundButton(bar, "添加", self._on_add, kind="accent",
+                              parent_bg=theme.CANVAS)
+        add_btn.pack(side="right")
+        attach_tooltip(add_btn, "手动录入一条密钥（N）")
+        refresh_btn = RoundButton(bar, "刷新", self.refresh,
+                                  parent_bg=theme.CANVAS)
+        refresh_btn.pack(side="right", padx=(0, theme.GAP))
+        attach_tooltip(refresh_btn, "重新读取 vault（F5）")
+
+    def _clear_filters(self) -> None:
+        self._search.set("")
+        self._status_filter.set("")
+        self._search_entry.entry.focus_set()
+        self.refresh()
+
+    def focus_search(self) -> None:
+        """Ctrl+F 落点：聚焦搜索框并全选现有词，方便直接覆盖输入。"""
+        self._search_entry.entry.focus_set()
+        self._search_entry.entry.select_range(0, "end")
+
+    def _bind_keys(self) -> None:
+        """表格键盘层：Enter 详情 / Delete 删除 / Ctrl+C 复制 / F5 刷新。
+
+        都委托给右键菜单同一批方法——一个动作只有一个实现，键盘只是
+        多一条到达路径。
+        """
+        tree = self._table.tree
+        tree.bind("<Return>", lambda _e: self._on_show(self._sel_name()))
+        tree.bind("<Delete>", lambda _e: self._on_delete(self._sel_name()))
+        tree.bind("<Control-c>", self._copy_selected)
+        tree.bind("<F5>", lambda _e: self.refresh())
+
+    def _copy_selected(self, _event=None) -> str:
+        name = self._sel_name()
+        if name:
+            self._on_copy(name)
+            return "break"
+        return ""
 
     def _build_menu(self) -> None:
         self._menu = tk.Menu(self, tearoff=0)
@@ -149,9 +171,13 @@ class SecretsPage(ttk.Frame):
             self._show_empty("empty")
             self._app.set_status("0 条记录")
             return
-        self._show_table()
         self._statbar.update(store)
         self._statbar.pack(fill="x", before=self._toolbar, pady=(0, theme.GAP))
+        if not self._rows:
+            self._show_no_match(query, status)
+            self._app.set_status("没有匹配的记录")
+            return
+        self._show_table()
         from kv.ops.health import health_report
 
         expiring = set(health_report(store).expiring)
@@ -170,59 +196,25 @@ class SecretsPage(ttk.Frame):
             ), tags=(tag,))
         self._app.set_status(f"{len(self._rows)} 条记录")
 
-    def _draw_art(self) -> None:
-        """空态插图：主色浅底圆 + 钥匙线稿。"""
-        from kv.gui import icons
-
-        c = self._art
-        c.delete("all")
-        s = _px(72)
-        c.create_oval(
-            _px(4), _px(4), s - _px(4), s - _px(4),
-            fill=theme.ACCENT_SOFT, outline="",
-        )
-        icons.draw_key(c, s / 2, s / 2, _px(30), theme.ACCENT)
-
     def _show_empty(self, mode: str) -> None:
-        """空态引导：mode = uninitialized / empty。"""
-        texts = {
-            "uninitialized": (
-                "还没有创建密钥库",
-                "密钥库用 Windows DPAPI 加密，只属于当前 Windows 账户，数据不出本机。",
-                "初始化 Vault", "看看设置页", "了解捕获",
-            ),
-            "empty": (
-                "库里还没有密钥",
-                "手动添加一条，或开启剪贴板监控——复制到密钥时会自动识别并进入审批队列。",
-                "添加密钥", "去设置页", "开启捕获",
-            ),
-        }
-        title, hint, b1, b2, b3 = texts[mode]
-        self._draw_art()
-        self._empty_title.config(text=title)
-        self._empty_hint.config(text=hint)
-        self._empty_btn1.set_text(b1)
-        self._empty_btn2.set_text(b2)
-        self._empty_btn3.set_text(b3)
-        if mode == "uninitialized":
-            self._empty_btn1.set_command(self._app.initialize_vault)
-            self._empty_btn2.set_command(lambda: self._app.show_page("settings"))
-            self._empty_btn3.set_command(self._go_capture)
-        else:
-            self._empty_btn1.set_command(self._on_add)
-            self._empty_btn2.set_command(lambda: self._app.show_page("settings"))
-            self._empty_btn3.set_command(self._go_capture)
-        self._empty.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        """显示空态卡（文案与按钮在 StateCards），visibility 在页面。"""
+        self._states.show_empty(mode)
+        self._states.empty.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        self._states.no_match.pack_forget()
         # 隐藏表格所在的父容器（Card）：pack_forget 只对顶层 pack 生效
         self._table.master.master.pack_forget()
 
-    def _go_capture(self) -> None:
-        self._app.show_page("capture")
+    def _show_no_match(self, query: str, status: str) -> None:
+        self._states.show_no_match(query, status)
+        self._table.master.master.pack_forget()
+        self._states.empty.pack_forget()
+        self._states.no_match.pack(fill="both", expand=True, pady=(theme.GAP, 0))
 
     def _show_table(self) -> None:
         if not self._table.master.master.winfo_manager():
             self._table.master.master.pack(fill="both", expand=True, pady=(theme.GAP, 0))
-        self._empty.pack_forget()
+        self._states.empty.pack_forget()
+        self._states.no_match.pack_forget()
 
     def _on_add(self) -> None:
         fields = [

@@ -46,6 +46,7 @@ class DataTable(ttk.Frame):
         vsb.grid(row=0, column=1, sticky="ns")
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
+        self._headings = list(headings)
         for i, col in enumerate(self._columns):
             self.tree.heading(col, text=headings[i], command=lambda c=col: self._sort_by(c))
             w = widths[i] if widths and i < len(widths) else 120
@@ -100,6 +101,16 @@ class DataTable(ttk.Frame):
         items.sort(reverse=self._sort_rev)
         for idx, (_, k) in enumerate(items):
             self.tree.move(k, "", idx)
+        self._paint_sort_arrow()
+
+    def _paint_sort_arrow(self) -> None:
+        """表头排序指示：当前列 ▲/▼，其余恢复纯文字——点了没反馈等于没排序。"""
+        for i, col in enumerate(self._columns):
+            base = self._headings[i]
+            if col == self._sort_col:
+                self.tree.heading(col, text=f"{base} {'▼' if self._sort_rev else '▲'}")
+            else:
+                self.tree.heading(col, text=base)
 
     def _handle_double(self, _event: tk.Event) -> None:
         row = self.selected_row()

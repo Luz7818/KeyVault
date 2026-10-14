@@ -142,9 +142,9 @@ class DonutCard(Card):
             self.body, width=_px(64), height=_px(64), bg=theme.SURFACE,
             highlightthickness=0, bd=0,
         )
-        self._canvas.pack(side="left", padx=(_px(12), 0), pady=_px(10))
+        self._canvas.pack(side="left", padx=(_px(8), 0), pady=_px(10))
         self._legend = tk.Frame(self.body, bg=theme.SURFACE)
-        self._legend.pack(side="left", padx=(_px(10), 0), pady=_px(12), fill="x")
+        self._legend.pack(side="left", padx=(_px(6), 0), pady=_px(12), fill="x")
         self._draw_donut(segments)
         self._draw_legend(segments)
 
@@ -176,8 +176,8 @@ class DonutCard(Card):
                             bg=theme.SURFACE, highlightthickness=0, bd=0)
             dot.pack(side="left")
             dot.create_oval(1, 1, _px(7), _px(7), fill=color, outline=color)
-            # 长平台名截断 —— 图例宽受卡片约束，溢出会被硬裁更难看
-            shown = label if len(label) <= 14 else label[:13] + "…"
+            # 长平台名截断 —— 图例宽受卡片约束，Label 会居中裁掉两端，更难看
+            shown = label if len(label) <= 10 else label[:9] + "…"
             tk.Label(
                 row, text=shown, font=theme.FONT_SMALL, bg=theme.SURFACE,
                 fg=theme.TEXT_SECONDARY,
