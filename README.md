@@ -6,7 +6,7 @@ kv 是一个纯 Python 实现的本地密钥保管 CLI 工具，用 Windows DPAP
 
 输入一条 `kv add --name ds --value sk-abc...`，值经 DPAPI 加密后写入 SQLite；`kv copy ds` 把明文放到剪贴板，30 秒后自动擦除；`kv scan ./repo` 扫描目录树，用已存指纹匹配泄露的密钥，输出文件名和行号。
 
-**574 条测试 · 103 个源文件 · 18 835 行 Python（复核：`python -I -m unittest discover -s tests -t .`、
+**575 条测试 · 105 个源文件 · 19 001 行 Python（复核：`python -I -m unittest discover -s tests -t .`、
 `find . -name "*.py" -not -path "*/__pycache__/*" | wc -l` 及同命令把 `wc -l` 换成按文件累加行数）**
 
 ## 30 秒跑通
@@ -43,7 +43,7 @@ vault 默认建在 `%LOCALAPPDATA%\KeyVault\`，不在当前目录；可用 `--v
 | 目录 | 负责 |
 |---|---|
 | `kv/` | 主包：CLI、加密、检测、存储、操作 |
-| `tests/` | 测试套件：548 条用例 + 金标语料 |
+| `tests/` | 测试套件：575 条用例 + 金标语料 |
 
 逐个目录的说明见各目录下的 `README.md`。
 

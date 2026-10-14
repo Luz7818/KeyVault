@@ -357,3 +357,30 @@ init/golden 两查在旧包上实测拦截成功。
 的 `echo 不需` 被吃，cmd 报 `'??安装' is not recognized`）。文案调整治不了，
 改为 build.bat 输出纯 ASCII（Python 侧的中文输出不受影响，正常显示）；
 packaging/README「别动」记录该约束与复现尺寸。
+
+## 2026-10-14 · GUI 质感升级批（用户反馈「太简单没质感」）
+
+设计语言：浅灰画布 + 白卡片分层、深墨蓝渐变侧边栏、主色聚焦光晕、行级 hover
+反馈。全部 tkinter 手绘（stdlib 不变），无位图资源。
+
+- **画布分层**：内容区底色改浅灰 CANVAS（theme.py 新令牌 + Page.* 样式族），
+  白卡片浮在画布上——此前全白底只剩 1px 描边可用，是「平」的主要来源；
+  六页全部适配（卡片、工具栏、页头、LabelFrame 各自换 Page 样式）。
+- **侧边栏重写为一整块 Canvas**（app.py）：垂直渐变（SIDEBAR_TOP/BOTTOM）+
+  手绘品牌区/分组导航/主色指示条（弹簧滑动）/页脚版本栏。tk.Label 拼 sidebar
+  的话每个不透明控件都会在渐变上盖出色差，手绘是唯一无色差的做法。
+  顺带修复：首帧 sidebar 未画好时 show_page 提前返回不抬页面（启动停在设置页）。
+- **组件精修**（controls/button/paint/widgets）：RoundButton 拆到 button.py、
+  绘图原语拆到 paint.py（controls 回落 330 行预算内）；accent 按钮加深色描边
+  （立体感）；RoundEntry 聚焦画 ACCENT_SOFT 光晕环；TabBar pill 改圆角胶囊 +
+  非选中项 hover 渐变；Card 描边精修 + 底部影线；表格去斑马纹改行 hover 高亮
+  （点选交回选中色），扫描/检测列宽微调（aws-access-key-id 不再截断）；
+  状态栏加状态点（消息性质编码成颜色）。
+- **空态插图**：密钥管理页空态画主色浅底圆 + 钥匙线稿，居中排版。
+- **测试**：TabBar 回归测试重写为两层——机制层（数 tkraise，旧实现只抬 1 次、
+  修复后每次 add 都抬）+ 屏幕层（winfo_containing，桌面被全屏遮挡层覆盖时
+  自动 skipTest；实测 explorer 的 Backstop Window 会整面挡住 hit-test 且
+  topmost 也压不过，此类环境跳过不误报）。真剪切板测试加探针：OS 拒绝
+  剪贴板访问时显式 skip 而非误报（本会话实测剪贴板被系统级锁死）。
+- 门禁：`Ran 575, OK (skipped=4)`（2 项原有 skip + 屏幕层/剪贴板的环境条件
+  skip）；六页离屏截图（PrintWindow）逐页目检通过；重打包通过。
