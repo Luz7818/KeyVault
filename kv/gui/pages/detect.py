@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from kv.gui import theme
+from kv.gui import icons, theme
 from kv.gui.controls import Card, RoundButton
 from kv.gui.widgets import DataTable, PageHeader
 
@@ -30,7 +30,8 @@ class DetectPage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        PageHeader(self, "检测", "粘贴文本或选文件，找出其中的密钥形态").pack(
+        PageHeader(self, "检测", "粘贴文本或选文件，找出其中的密钥形态",
+                   draw_icon=icons.draw_search).pack(
             anchor="w", pady=(0, theme.GAP),
         )
         # 底部区先占位：中部结果表格 expand 后不会把它挤出窗口

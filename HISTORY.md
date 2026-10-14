@@ -384,3 +384,26 @@ packaging/README「别动」记录该约束与复现尺寸。
   剪贴板访问时显式 skip 而非误报（本会话实测剪贴板被系统级锁死）。
 - 门禁：`Ran 575, OK (skipped=4)`（2 项原有 skip + 屏幕层/剪贴板的环境条件
   skip）；六页离屏截图（PrintWindow）逐页目检通过；重打包通过。
+
+## 2026-10-15 · GUI 设计元素批（用户反馈「加点设计元素」）
+
+在画布分层的基础上加了五件东西，全部 tkinter 手绘、零依赖：
+
+- **密钥页仪表盘**（新模块 kv/gui/statbar.py）：四张指标卡（全部/启用/30 天内
+  到期/已吊销过期，语义色条 + 图标芯片 + 大数字）+ 平台分布环形图（Canvas arc
+  圆环段 + 色点图例，长平台名截断省略）。聚合是纯函数（collect_metrics /
+  platform_distribution），tests/test_gui_statbar.py 6 条守口径——仪表盘不许
+  说谎；有记录才显示，空态/未初始化隐藏。
+- **页头图标芯片**：六页 PageHeader 统一加 ACCENT_SOFT 圆角芯片 + 各自的
+  矢量线稿图标（钥匙/放大镜/闪电/层叠/盾牌/滑杆）。
+- **表格状态列中文化**：● 启用 / ● 已吊销 / ● 已过期，点色随整行语义 tag。
+- **侧边栏页脚快捷键提示**：描边胶囊「Ctrl + K 快速复制密钥」。
+- **详情窗徽章状态着色**：启用主色 / 吊销红 / 过期橙（此前固定主色）。
+
+修的三个实现坑：StatCard/DonutCard 落在 Canvas 默认请求宽上会把一行卡片撑出
+横向溢出（width=1 让位给 pack）；空环形图误用 create_oval（无 style 选项，
+改 create_arc extent=359.9）；build_detail_window 加色后破 60 行函数预算
+（徽章色表提为模块常量 BADGE_STYLES）。
+
+门禁 `Ran 581, OK (skipped=3)`；secrets/detect/security 三页离屏截图目检；
+全部文件在 460/60 行预算内。

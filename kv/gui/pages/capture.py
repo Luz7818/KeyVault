@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Any
 
-from kv.gui import theme
+from kv.gui import icons, theme
 from kv.gui.controls import Card, RoundButton, TabBar
 from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
@@ -29,7 +29,8 @@ class CapturePage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        PageHeader(self, "捕获", "剪贴板监听——候选先进审批队列，接受后才入库").pack(
+        PageHeader(self, "捕获", "剪贴板监听——候选先进审批队列，接受后才入库",
+                   draw_icon=icons.draw_bolt).pack(
             anchor="w", pady=(0, theme.GAP),
         )
         # TabBar 坐在一张圆角白卡里：pill 导航条 + 内容纸面成一个整体

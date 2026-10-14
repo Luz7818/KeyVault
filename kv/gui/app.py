@@ -10,7 +10,7 @@ from __future__ import annotations
 import queue
 import threading
 import tkinter as tk
-from tkinter import ttk
+from tkinter import font as tkfont, ttk
 from typing import Any, Callable
 
 from kv import __version__
@@ -193,15 +193,27 @@ class App(tk.Tk):
 
     def _paint_footer(self, w: int, h: int) -> None:
         c = self._sidebar
-        y = h - _px(58)
+        y = h - _px(78)
         c.create_line(_px(20), y, w - _px(20), y, fill=theme.SIDEBAR_HAIRLINE, width=1)
-        c.create_text(
-            _px(44), y + _px(16), text=f"kv {__version__}", anchor="w",
-            fill=theme.SIDEBAR_MUTED, font=theme.FONT_SUBTITLE,
+        # Ctrl+K 提示：描边胶囊 + 键位文字，可点的视觉暗示
+        label = "Ctrl"
+        f = tkfont.Font(font=theme.FONT_SMALL)
+        lw = f.measure(label)
+        c.create_rectangle(
+            _px(44), y + _px(12), _px(44) + lw + _px(12), y + _px(30),
+            outline=theme.SIDEBAR_MUTED, width=1,
         )
         c.create_text(
-            _px(44), y + _px(36), text="数据不出本机", anchor="w",
-            fill=theme.SIDEBAR_SECTION, font=theme.FONT_SUBTITLE,
+            _px(44) + lw / 2 + _px(6), y + _px(21), text=label,
+            fill=theme.SIDEBAR_MUTED, font=theme.FONT_SMALL,
+        )
+        c.create_text(
+            _px(44) + lw + _px(20), y + _px(21), text="+ K  快速复制密钥",
+            anchor="w", fill=theme.SIDEBAR_MUTED, font=theme.FONT_SMALL,
+        )
+        c.create_text(
+            _px(44), y + _px(46), text=f"kv {__version__} · 数据不出本机",
+            anchor="w", fill=theme.SIDEBAR_SECTION, font=theme.FONT_SUBTITLE,
         )
 
     def _set_hover(self, key: str) -> None:

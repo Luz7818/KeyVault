@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from kv.gui import theme
+from kv.gui import icons, theme
 from kv.gui.controls import Card, RoundButton, RoundEntry, TabBar
 from kv.gui.widgets import DataTable, PageHeader
 
@@ -27,7 +27,8 @@ class SecurityPage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        PageHeader(self, "安全", "泄露扫描、审计溯源、过期清除").pack(
+        PageHeader(self, "安全", "泄露扫描、审计溯源、过期清除",
+                   draw_icon=icons.draw_shield).pack(
             anchor="w", pady=(0, theme.GAP),
         )
         nb_card = Card(self)

@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from kv import __version__
-from kv.gui import theme
+from kv.gui import icons, theme
 from kv.gui.controls import Card, RoundButton, RoundEntry
 from kv.gui.widgets import PageHeader
 
@@ -19,7 +19,8 @@ class SettingsPage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        PageHeader(self, "设置", "初始化 vault、健康检查与配置项").pack(
+        PageHeader(self, "设置", "初始化 vault、健康检查与配置项",
+                   draw_icon=icons.draw_sliders).pack(
             anchor="w", pady=(0, theme.GAP),
         )
         info_card = Card(self)

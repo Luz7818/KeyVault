@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from kv.gui import theme
+from kv.gui import icons, theme
 from kv.gui.controls import Card, RoundButton, RoundEntry, TabBar
 from kv.gui.widgets import FormDialog, PageHeader
 
@@ -18,7 +18,8 @@ class IngestPage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        PageHeader(self, "批量操作", "从 .env / CSV 批量导入，注入或轮换").pack(
+        PageHeader(self, "批量操作", "从 .env / CSV 批量导入，注入或轮换",
+                   draw_icon=icons.draw_layers).pack(
             anchor="w", pady=(0, theme.GAP),
         )
         nb_card = Card(self)

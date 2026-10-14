@@ -19,17 +19,21 @@ class Card(tk.Canvas):
     """圆角描边卡片：外圈 1px 描边 + 底部一道浅影线，body 是内容容器。
 
     卡片默认坐在画布色（CANVAS）上——parent_bg 必须与实际所在处的底色一致，
-    否则圆角外露出色差方块。fill="x" 的场景必须传 height，否则 Canvas 落回
-    默认的 10cm 请求高。
+    否则圆角外露出色差方块。Canvas 的默认请求宽是 ~10cm：fill="x" 的场景必须
+    传 height（否则落回默认请求高），横向挤排的卡片还要传 width=1 把请求宽
+    让给 pack 分配，否则一行卡片会把窗口撑出横向溢出。
     """
 
     def __init__(self, parent: tk.Widget, *, radius: int | None = None,
-                 height: int | None = None, parent_bg: str = theme.CANVAS) -> None:
+                 height: int | None = None, width: int | None = None,
+                 parent_bg: str = theme.CANVAS) -> None:
         super().__init__(
             parent, bg=parent_bg, highlightthickness=0, bd=0,
         )
         if height is not None:
             self.configure(height=height)
+        if width is not None:
+            self.configure(width=width)
         self._radius = radius or theme.RADIUS
         self.body = tk.Frame(self, bg=theme.SURFACE)
         self.body.place(x=1, y=1, relwidth=1.0, width=-2, relheight=1.0, height=-2)

@@ -35,6 +35,13 @@ def detail_rows(row, fps: list, history: list) -> list[tuple[str, str, list]]:
     return sections
 
 
+BADGE_STYLES = {
+    "active": (theme.ACCENT_SOFT, theme.ACCENT),
+    "revoked": (theme.ERROR_SOFT, theme.ERROR),
+    "expired": ("#fdf0e0", theme.WARNING),
+}
+
+
 def build_detail_window(row, fps: list, history: list) -> None:
     import tkinter as tk
     from tkinter import ttk
@@ -52,11 +59,12 @@ def build_detail_window(row, fps: list, history: list) -> None:
     head.pack(fill="x", padx=theme.PAD, pady=(theme.PAD, 0))
     tk.Label(head, text=row.name, font=theme.FONT_HEADING,
              bg=theme.SURFACE, fg=theme.TEXT).pack(side="left")
-    badge = tk.Label(
+    # 徽章按状态语义着色：启用主色 / 吊销红 / 过期橙
+    badge_bg, badge_fg = BADGE_STYLES.get(row.status, (theme.ACCENT_SOFT, theme.ACCENT))
+    tk.Label(
         head, text=f" {row.platform} · {row.status} ", font=theme.FONT_SUBTITLE,
-        bg=theme.ACCENT_SOFT, fg=theme.ACCENT,
-    )
-    badge.pack(side="left", padx=(theme.PAD, 0))
+        bg=badge_bg, fg=badge_fg,
+    ).pack(side="left", padx=(theme.PAD, 0))
 
     body = tk.Canvas(win, bg=theme.SURFACE, highlightthickness=0, bd=0)
     body.pack(fill="both", expand=True, padx=theme.PAD, pady=(theme.GAP, 0))

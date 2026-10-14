@@ -6,9 +6,10 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Any
 
-from kv.gui import theme
+from kv.gui import icons, theme
 from kv.gui.controls import Card, RoundButton, RoundEntry
 from kv.gui.detail_window import build_detail_window
+from kv.gui.statbar import STATUS_LABELS, StatBar
 from kv.gui.widgets import DataTable, FormDialog, PageHeader
 
 COLUMNS = ("name", "platform", "status", "preview", "created_at")
@@ -28,8 +29,12 @@ class SecretsPage(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        self._header = PageHeader(self, "密钥管理", "存取、轮换、审计——所有数据不出本机")
+        self._header = PageHeader(
+            self, "密钥管理", "存取、轮换、审计——所有数据不出本机",
+            draw_icon=icons.draw_key,
+        )
         self._header.pack(anchor="w", pady=(0, theme.GAP))
+        self._statbar = StatBar(self)
         self._build_toolbar()
         self._build_empty_state()
         card = Card(self)
@@ -77,6 +82,7 @@ class SecretsPage(ttk.Frame):
     def _build_toolbar(self) -> None:
         bar = ttk.Frame(self, style="Page.TFrame")
         bar.pack(fill="x")
+        self._toolbar = bar
         self._search = tk.StringVar()
         self._search.trace_add("write", lambda *_: self.refresh())
         RoundEntry(bar, textvariable=self._search, width=260,
@@ -126,6 +132,7 @@ class SecretsPage(ttk.Frame):
     def refresh(self) -> None:
         store = self._app.store
         if store is None:
+            self._statbar.pack_forget()  # 未初始化时仪表盘没有可说的
             self._show_empty("uninitialized")
             self._app.set_status("vault 未初始化", color=theme.WARNING)
             return
@@ -138,10 +145,13 @@ class SecretsPage(ttk.Frame):
             filters["status"] = status
         self._rows = store.list_secrets(**filters)
         if not self._rows and not query and not status:
+            self._statbar.pack_forget()
             self._show_empty("empty")
             self._app.set_status("0 条记录")
             return
         self._show_table()
+        self._statbar.update(store)
+        self._statbar.pack(fill="x", before=self._toolbar, pady=(0, theme.GAP))
         from kv.ops.health import health_report
 
         expiring = set(health_report(store).expiring)
@@ -153,8 +163,9 @@ class SecretsPage(ttk.Frame):
                 tag = "st-expiring"   # 30 天内到期：整行橙色提醒
             else:
                 tag = f"st-{row.status}"
+            status = f"● {STATUS_LABELS.get(row.status, row.status)}"
             self._table.insert_row((
-                row.name, row.platform, row.status,
+                row.name, row.platform, status,
                 row.preview("*"), created,
             ), tags=(tag,))
         self._app.set_status(f"{len(self._rows)} 条记录")

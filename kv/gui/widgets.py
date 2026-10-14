@@ -192,13 +192,37 @@ class FormDialog(tk.Toplevel):
 
 
 class PageHeader(ttk.Frame):
-    """页头：大标题 + 一行副标题，全应用统一的页面开场。坐在画布色上。"""
+    """页头：图标芯片 + 大标题 + 一行副标题，全应用统一的页面开场。
 
-    def __init__(self, parent: tk.Widget, title: str, subtitle: str = "") -> None:
+    icon 传 icons 模块的绘制函数；不传则纯文字（兼容旧调用点）。
+    """
+
+    def __init__(self, parent: tk.Widget, title: str, subtitle: str = "",
+                 *, draw_icon=None) -> None:
         super().__init__(parent, style="Page.TFrame")
-        ttk.Label(self, text=title, style="PageHeading.TLabel").pack(anchor="w")
+        from kv.gui.paint import round_points
+
+        chip_size = _px(40)
+        if draw_icon is not None:
+            chip = tk.Canvas(
+                self, width=chip_size, height=chip_size, bg=theme.CANVAS,
+                highlightthickness=0, bd=0,
+            )
+            chip.grid(row=0, column=0, rowspan=2, padx=(0, theme.PAD_SM))
+            pts = round_points(1, 1, chip_size - 1, chip_size - 1, _px(11))
+            chip.create_polygon(*pts, fill=theme.ACCENT_SOFT, outline="", smooth=True)
+            draw_icon(chip, chip_size / 2, chip_size / 2, _px(19), theme.ACCENT)
+        ttk.Label(self, text=title, style="PageHeading.TLabel").grid(
+            row=0, column=1, sticky="w",
+        )
         if subtitle:
-            ttk.Label(self, text=subtitle, style="PageSub.TLabel").pack(anchor="w", pady=(2, 0))
+            ttk.Label(self, text=subtitle, style="PageSub.TLabel").grid(
+                row=1, column=1, sticky="w", pady=(2, 0),
+            )
+
+
+def _px(base: int) -> int:
+    return max(round(base * theme.SCALE), 1)
 
 
 class StatusLabel(ttk.Frame):
