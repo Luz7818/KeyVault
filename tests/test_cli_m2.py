@@ -183,6 +183,13 @@ class TestCopyViaCli(CliTestCase):
     """需要真 Win32 剪切板的端到端测试。"""
 
     def test_copy_puts_value_on_clipboard(self):
+        from kv.capture.clipboard import Win32Clipboard
+
+        # 剪贴板可能被系统级占用（捕获基础设施 / 安全软件），先探针再跑：
+        # OS 拒绝一切剪贴板访问时跳过，而不是误报产品回归。
+        probe = Win32Clipboard()
+        if not probe.write("kv-clipboard-probe", exclude_history=True):
+            self.skipTest("剪切板被系统级占用，无法做真剪切板验证")
         self.init_vault()
         self.add_secret()
         code, out, _ = self.run_cli(["copy", "deepseek-main", "--no-wipe"])
