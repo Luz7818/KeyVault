@@ -124,9 +124,15 @@ class Sidebar(tk.Canvas):
             title_x, cy, text="KeyVault", anchor="w", fill="#ffffff",
             font=theme.FONT_HEADING,
         )
+        # 副标题位置按字体真实行高度量排（标题底 + 间距 + 副标题半高）——
+        # 固定 24px 偏移在高缩放下小于标题行高的半，两行字直接叠在一起
+        f_title = tkfont.Font(font=theme.FONT_HEADING)
+        f_sub = tkfont.Font(font=theme.FONT_SUBTITLE)
+        sub_cy = (cy + f_title.metrics("linespace") // 2
+                  + _px(8) + f_sub.metrics("linespace") // 2)
         # 副标题与标题左对齐（曾对齐到 logo 左缘，视觉上歪向一侧）
         self.create_text(
-            title_x, cy + _px(24), text="本地密钥保管箱", anchor="w",
+            title_x, sub_cy, text="本地密钥保管箱", anchor="w",
             fill=theme.SIDEBAR_MUTED, font=theme.FONT_SUBTITLE,
         )
 
@@ -141,7 +147,7 @@ class Sidebar(tk.Canvas):
     def _paint_nav(self, w: int) -> int:
         """画分组导航，返回导航区的结束 y（页脚锚定用）。"""
         g = self._grid()
-        y = _px(112)
+        y = _px(120)
         for section, entries in NAV_SECTIONS:
             self.create_text(
                 g["icon_x"], y + _px(10), text=section, anchor="w",
