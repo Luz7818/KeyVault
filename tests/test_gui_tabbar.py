@@ -53,11 +53,11 @@ class TestTabBarStacking(unittest.TestCase):
         calls = self._spy_raises()
         bar = TabBar(self.root)
         bar.pack(fill="both", expand=True)  # 与真实页面一致：内容区要有高度可分
-        first = bar.add("a", "甲")
+        bar.add("a", "甲")
         bar.add("b", "乙")
         bar.add("c", "丙")
         bar.add("d", "丁")
-        return bar, first, calls
+        return bar, bar._items["a"]["frame"], calls
 
     def test_add_reraises_current_tab_every_time(self):
         """修复契约：每次 add() 都把当前页重新抬顶（旧代码只抬 1 次）。
@@ -66,26 +66,30 @@ class TestTabBarStacking(unittest.TestCase):
         每次新增标签都会把新的 outer place 到堆叠顶，所以当前页至少要被
         抬「add 次数」次才守得住可见性（on_show_first 的那次是额外收益）。
         """
-        bar, first, calls = self._build_four_tabs()
-        outer = first.master
+        bar, _first, calls = self._build_four_tabs()
+        # add() 返回 ScrollPage.content；被 raise 的是注册表里的 outer 层
+        outer = str(bar._items["a"]["frame"])
         self.assertEqual(bar.current, "a")
         self.assertGreaterEqual(
-            calls.count(str(outer)),
+            calls.count(outer),
             4,
             f"初始标签应被每次 add() 重新抬顶（至少 4 次），实际 {calls}",
         )
 
     def test_select_raises_target_frame(self):
-        bar, _first, calls = self._build_four_tabs()
-        second = bar._items["b"]["frame"]
+        bar, _outer_a, calls = self._build_four_tabs()
+        outer_b = str(bar._items["b"]["frame"])
         calls.clear()
         bar.select("b")
         self.assertEqual(bar.current, "b")
-        self.assertEqual(calls, [str(second)])
+        self.assertEqual(calls, [outer_b])
 
     def test_screen_hit_test_sees_initial_tab(self):
-        """端到端：屏幕同一点命中的必须是初始标签的内容层。"""
-        bar, first, _calls = self._build_four_tabs()
+        """端到端：屏幕同一点命中的必须落在初始标签的内容区里。
+
+        add() 返回 ScrollPage.content，命中 content 内的空白画布也算——
+        所以判据是对 outer（注册表里的堆叠层）取前缀。"""
+        bar, outer_a, _calls = self._build_four_tabs()
         self.root.update()
         # 探针：自己的窗口必须可命中，否则桌面有全屏遮挡层，测试失去意义
         if self.root.winfo_containing(150, 100) is None:
@@ -93,8 +97,8 @@ class TestTabBarStacking(unittest.TestCase):
         top = self.root.winfo_containing(150, 100)
         self.assertIsNotNone(top)
         self.assertTrue(
-            str(top).startswith(str(first)),
-            f"屏幕最顶层窗口 {top} 不在初始标签内容层 {first} 里",
+            str(top).startswith(str(outer_a)),
+            f"屏幕最顶层窗口 {top} 不在初始标签内容区 {outer_a} 里",
         )
 
 

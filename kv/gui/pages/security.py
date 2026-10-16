@@ -58,6 +58,7 @@ class SecurityPage(ttk.Frame):
         scan_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._scan_table = DataTable(
             scan_card.body, SCAN_COLS, headings=SCAN_HEADS, widths=SCAN_WIDTHS,
+            rows=8,
         )
         self._scan_table.pack(fill="both", expand=True, padx=1, pady=1)
 
@@ -82,6 +83,7 @@ class SecurityPage(ttk.Frame):
         audit_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._audit_table = DataTable(
             audit_card.body, AUDIT_COLS, headings=AUDIT_HEADS, widths=AUDIT_WIDTHS,
+            rows=9,
         )
         self._audit_table.pack(fill="both", expand=True, padx=1, pady=1)
         self._audit_events: list = []
@@ -117,14 +119,14 @@ class SecurityPage(ttk.Frame):
         pw_row.pack(fill="x")
         ttk.Label(pw_row, text="口令", style="Sub.TLabel").pack(side="left")
         self._bk_pw = tk.StringVar()
-        RoundEntry(pw_row, textvariable=self._bk_pw, width=200, show="*").pack(side="left", padx=(theme.GAP, theme.GAP))
+        RoundEntry(pw_row, textvariable=self._bk_pw, width=110, show="*").pack(side="left", padx=(theme.GAP, theme.GAP))
         ttk.Label(pw_row, text="确认口令", style="Sub.TLabel").pack(side="left")
         self._bk_pw2 = tk.StringVar()
-        RoundEntry(pw_row, textvariable=self._bk_pw2, width=200, show="*").pack(side="left", padx=theme.GAP)
+        RoundEntry(pw_row, textvariable=self._bk_pw2, width=110, show="*").pack(side="left", padx=theme.GAP)
         path_row = ttk.Frame(exp)
         path_row.pack(fill="x", pady=(theme.GAP, 0))
         self._bk_path = tk.StringVar()
-        RoundEntry(path_row, textvariable=self._bk_path, width=480).pack(side="left", fill="x", expand=True)
+        RoundEntry(path_row, textvariable=self._bk_path, width=200).pack(side="left", fill="x", expand=True)
         RoundButton(path_row, "浏览", self._pick_backup_path).pack(side="left", padx=theme.GAP)
         RoundButton(path_row, "导出备份", self._do_backup, kind="accent").pack(side="left")
 
@@ -133,11 +135,11 @@ class SecurityPage(ttk.Frame):
         res_row = ttk.Frame(res)
         res_row.pack(fill="x")
         self._rs_path = tk.StringVar()
-        RoundEntry(res_row, textvariable=self._rs_path, width=420).pack(side="left", fill="x", expand=True)
+        RoundEntry(res_row, textvariable=self._rs_path, width=200).pack(side="left", fill="x", expand=True)
         RoundButton(res_row, "浏览", self._pick_restore_path).pack(side="left", padx=theme.GAP)
         ttk.Label(res_row, text="口令", style="Sub.TLabel").pack(side="left")
         self._rs_pw = tk.StringVar()
-        RoundEntry(res_row, textvariable=self._rs_pw, width=180, show="*").pack(side="left", padx=(theme.GAP, theme.GAP))
+        RoundEntry(res_row, textvariable=self._rs_pw, width=110, show="*").pack(side="left", padx=(theme.GAP, theme.GAP))
         RoundButton(res_row, "恢复", self._do_restore, kind="accent").pack(side="left")
         ttk.Label(
             res, style="Muted.TLabel",

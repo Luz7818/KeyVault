@@ -74,11 +74,10 @@ class App(tk.Tk):
             if w is self._sidebar:
                 self._sidebar.wheel_scroll(-(event.delta // 120))
                 return "break"
-            if any(w is p for p in self._pages.values()):
-                if hasattr(w, "wheel_scroll"):
-                    w.wheel_scroll(-(event.delta // 120))
-                    return "break"
-                return ""
+            # 顶层页与标签页内嵌的 ScrollPage 同一协议（wheel_scroll）
+            if hasattr(w, "wheel_scroll"):
+                w.wheel_scroll(-(event.delta // 120))
+                return "break"
             w = w.master
         return ""
 

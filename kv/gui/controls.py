@@ -126,7 +126,9 @@ class RoundEntry(tk.Canvas):
 
     def _draw(self) -> None:
         self.delete("all")
-        w, h = self.winfo_reqwidth(), self.winfo_reqheight()
+        # 用实际分配尺寸：pack fill/expand 放大后 reqwidth 不跟随，
+        # 圆角框会画在分配区的一角，看起来像控件「断掉」
+        w, h = self.winfo_width(), self.winfo_height()
         points = round_points(1, 1, w - 2, h - 2, self._radius)
         if self._focused:
             # 聚焦 = 主色描边 + 外圈一圈 ACCENT_SOFT 光晕（画两圈圆角矩形）
@@ -190,12 +192,19 @@ class TabBar(ttk.Frame):
             theme.LISTENERS.remove(self._relayout)
         super().destroy()
     def add(self, key: str, label: str) -> tk.Frame:
-        """注册一个标签，返回它的内容层（已带内边距，直接 pack 内容）。"""
+        """注册一个标签，返回它的内容层（已带内边距，直接 pack 内容）。
+
+        内容层是 ScrollPage——标签内的固定表单在高缩放档位会双向超出
+        可视区（备份/恢复页「导出备份」按钮被裁实测），统一可滚，
+        表格类内容传 rows 定高由表格自己的滚动条接管。
+        局部导入：widgets 反向依赖本模块的 SlimScrollbar。"""
+        from kv.gui.widgets import ScrollPage
+
         outer = tk.Frame(self._body, bg=theme.SURFACE)
         # 内容页全部 place 堆叠，切换靠 tkraise——与主窗口页面同一手法
         outer.place(in_=self._body, x=0, y=0, relwidth=1.0, relheight=1.0)
-        inner = tk.Frame(outer, bg=theme.SURFACE)
-        inner.pack(fill="both", expand=True, padx=theme.PAD, pady=theme.PAD)
+        scroller = ScrollPage(outer, bg=theme.SURFACE, padding=theme.PAD)
+        scroller.pack(fill="both", expand=True)
         self._items[key] = {"label": label, "frame": outer, "x": 0, "w": 0}
         self._order.append(key)
         if not self._current:
@@ -204,7 +213,7 @@ class TabBar(ttk.Frame):
         # place 的堆叠序 = 创建序，后注册的会盖住当前页——每次 add 都把
         # 当前页重新抬到顶，初始页才能在整个构建过程结束后仍然可见
         self._items[self._current]["frame"].tkraise()
-        return inner
+        return scroller.content
 
     def select(self, key: str) -> None:
         if key not in self._items:

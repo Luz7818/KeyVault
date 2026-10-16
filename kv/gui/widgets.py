@@ -17,20 +17,25 @@ class ScrollPage(ttk.Frame):
     固定表单的总请求高度会超过视口——pack 对放不下的内容直接裁掉，
     「设置页保存按钮被切一半」就是这么来的。子控件 pack 进 self.content。
 
+    bg 决定底色体系：整页用默认 CANVAS（灰画布 + Page.* 样式）；放进
+    白卡片/标签页时传 SURFACE——底色不配套会在圆角外露色差方块。
+
     滚轮滚动由 App 全局委派给指针所在页的 wheel_scroll()——页面全部
     place 堆叠，各页自己 bind_all 会串页。
     """
 
-    def __init__(self, parent: tk.Widget, *, padding=None) -> None:
-        super().__init__(parent, style="Page.TFrame",
+    def __init__(self, parent: tk.Widget, *, padding=None,
+                 bg: str = theme.CANVAS) -> None:
+        style = "Page.TFrame" if bg == theme.CANVAS else "TFrame"
+        super().__init__(parent, style=style,
                          padding=padding if padding is not None else theme.PAD)
         self._canvas = tk.Canvas(
-            self, bg=theme.CANVAS, highlightthickness=0, bd=0,
+            self, bg=bg, highlightthickness=0, bd=0,
             yscrollincrement=max(round(32 * theme.SCALE), 8),
         )
         self._canvas.pack(side="left", fill="both", expand=True)
         self._sb = SlimScrollbar(self, self._canvas)
-        self.content = tk.Frame(self._canvas, bg=theme.CANVAS)
+        self.content = tk.Frame(self._canvas, bg=bg)
         self._win = self._canvas.create_window(0, 0, window=self.content, anchor="nw")
         self.content.bind("<Configure>", self._sync)
         self._canvas.bind("<Configure>", self._sync)
@@ -66,6 +71,7 @@ class DataTable(ttk.Frame):
         *,
         headings: Sequence[str] | None = None,
         widths: Sequence[int] | None = None,
+        rows: int | None = None,
         on_double: Callable[[dict[str, Any]], None] | None = None,
         on_right_click: Callable[[tk.Event, dict[str, Any]], None] | None = None,
     ):
@@ -77,6 +83,10 @@ class DataTable(ttk.Frame):
         self._sort_rev = False
         self._hover_item: str | None = None
         self._build(headings or columns, widths)
+        # 可滚容器里的表格必须定高（expand 在滚动画布内无效）：
+        # rows = 常显行数，更多行由表格自带的细滚动条接管
+        if rows:
+            self.configure(height=theme.ROW_HEIGHT * (rows + 1) + theme.sp(12))
 
     def _build(self, headings: Sequence[str], widths: Sequence[int] | None) -> None:
         self.tree = ttk.Treeview(

@@ -95,7 +95,8 @@ class CapturePage(ttk.Frame):
         bar.pack(fill="x")
         RoundButton(bar, "加载未识别", self._load_unresolved).pack(side="left")
         RoundButton(bar, "设置平台", self._fix_selected, kind="accent").pack(side="left", padx=theme.GAP)
-        self._fix_table = DataTable(self._fix_tab, FIX_COLS, headings=FIX_HEADS, widths=FIX_WIDTHS)
+        self._fix_table = DataTable(self._fix_tab, FIX_COLS, headings=FIX_HEADS,
+                                    widths=FIX_WIDTHS, rows=8)
         self._fix_table.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._fix_rows: list[Any] = []
 
@@ -104,7 +105,8 @@ class CapturePage(ttk.Frame):
         bar.pack(fill="x")
         RoundButton(bar, "加载", self._load_corrections).pack(side="left")
         RoundButton(bar, "删除选中", self._delete_correction, kind="danger").pack(side="left", padx=theme.GAP)
-        self._corr_table = DataTable(self._corr_tab, CORR_COLS, headings=CORR_HEADS, widths=CORR_WIDTHS)
+        self._corr_table = DataTable(self._corr_tab, CORR_COLS, headings=CORR_HEADS,
+                                     widths=CORR_WIDTHS, rows=8)
         self._corr_table.pack(fill="both", expand=True, pady=(theme.GAP, 0))
 
     def _toggle_watch(self) -> None:

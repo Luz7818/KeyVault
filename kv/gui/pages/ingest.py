@@ -38,7 +38,7 @@ class IngestPage(ttk.Frame):
         bar = ttk.Frame(self._import_tab)
         bar.pack(fill="x")
         self._import_path = tk.StringVar()
-        RoundEntry(bar, textvariable=self._import_path, width=460).pack(
+        RoundEntry(bar, textvariable=self._import_path, width=200).pack(
             side="left", fill="x", expand=True,
         )
         RoundButton(bar, "浏览", self._pick_import).pack(side="left", padx=theme.GAP)
@@ -63,15 +63,16 @@ class IngestPage(ttk.Frame):
         form.pack(fill="x")
         ttk.Label(form, text="密钥名称：", style="Sub.TLabel").grid(row=0, column=0, sticky="w", pady=(9, 0))
         self._inject_name = tk.StringVar()
-        RoundEntry(form, textvariable=self._inject_name, width=280).grid(
+        RoundEntry(form, textvariable=self._inject_name, width=200).grid(
             row=0, column=1, sticky="w", padx=theme.GAP,
         )
         ttk.Label(form, text="目标 .env：", style="Sub.TLabel").grid(row=1, column=0, sticky="w", pady=(9, 0))
         inj_bar = ttk.Frame(form)
         inj_bar.grid(row=1, column=1, sticky="ew")
         self._inject_target = tk.StringVar()
-        RoundEntry(inj_bar, textvariable=self._inject_target, width=280).pack(side="left", fill="x", expand=True)
+        RoundEntry(inj_bar, textvariable=self._inject_target, width=160).pack(side="left", fill="x", expand=True)
         RoundButton(inj_bar, "浏览", self._pick_inject_target).pack(side="left", padx=theme.GAP)
+        form.columnconfigure(1, weight=1)
         self._inject_gitignore = tk.BooleanVar(value=True)
         ttk.Checkbutton(form, text="自动加 .gitignore", variable=self._inject_gitignore).grid(
             row=2, column=1, sticky="w", pady=4,
@@ -95,6 +96,7 @@ class IngestPage(ttk.Frame):
         )
         btn_bar = ttk.Frame(self._rotate_tab)
         btn_bar.pack(fill="x", pady=theme.PAD)
+        form.columnconfigure(1, weight=1)
         RoundButton(btn_bar, "轮换", self._do_rotate, kind="accent").pack(side="left")
         RoundButton(btn_bar, "吊销", self._do_revoke, kind="danger").pack(side="left", padx=theme.GAP)
         self._rotate_result = ttk.Label(self._rotate_tab, text="", font=theme.FONT_SMALL)
