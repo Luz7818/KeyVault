@@ -12,43 +12,46 @@ from kv.gui.detail_window import build_detail_window
 from kv.gui.pages.secrets_states import StateCards
 from kv.gui.statbar import STATUS_LABELS, StatBar
 from kv.gui.tooltip import attach as attach_tooltip
-from kv.gui.widgets import DataTable, FormDialog, PageHeader
+from kv.gui.widgets import DataTable, FormDialog, PageHeader, ScrollPage
 
 COLUMNS = ("name", "platform", "status", "preview", "created_at")
 HEADINGS = ("名称", "平台", "状态", "预览", "创建时间")
-WIDTHS = (170, 155, 80, 190, 160)
+WIDTHS = (160, 145, 90, 185, 185)
 
 
 def _px(base: int) -> int:
     return max(round(base * theme.SCALE), 1)
 
 
-class SecretsPage(ttk.Frame):
+class SecretsPage(ScrollPage):
     def __init__(self, parent: tk.Widget, *, app) -> None:
-        super().__init__(parent, padding=theme.PAD, style="Page.TFrame")
+        super().__init__(parent)
         self._app = app
         self._rows: list[Any] = []
         self._build()
 
     def _build(self) -> None:
+        c = self.content
         self._header = PageHeader(
-            self, "密钥管理", "存取、轮换、审计——所有数据不出本机",
+            c, "密钥管理", "存取、轮换、审计——所有数据不出本机",
             draw_icon=icons.draw_key,
         )
         self._header.pack(anchor="w", pady=(0, theme.GAP))
-        self._statbar = StatBar(self)
+        self._statbar = StatBar(c)
         self._build_toolbar()
         self._states = StateCards(
-            self,
+            c,
             on_add=self._on_add, on_init=self._app.initialize_vault,
             go_capture=lambda: self._app.show_page("capture"),
             go_settings=lambda: self._app.show_page("settings"),
             clear_filters=self._clear_filters,
         )
-        card = Card(self)
-        card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        # 表格定高：页身可滚后 expand 失去意义；行数少时高度贴合，多则表格
+        # 自己滚（滚轮在表格上是表格滚，在页面其余部分是页面滚——见 app._on_wheel）
+        self._table_card = Card(c, height=_px(340))
+        self._table_card.pack(fill="x", pady=(theme.GAP, 0))
         self._table = DataTable(
-            card.body, COLUMNS, headings=HEADINGS, widths=WIDTHS,
+            self._table_card.body, COLUMNS, headings=HEADINGS, widths=WIDTHS,
             on_double=lambda r: self._on_show(r["name"]),
             on_right_click=self._on_right_click,
         )
@@ -61,18 +64,23 @@ class SecretsPage(ttk.Frame):
         self._build_menu()
         self._bind_keys()
 
+    def _fit_table(self, n_rows: int) -> None:
+        """卡片高 = 表头 + min(行数, 10) 行，空表给两行高的空态区。"""
+        visible = min(max(n_rows, 2), 10)
+        self._table_card.configure(height=theme.ROW_HEIGHT * (visible + 1) + _px(12))
+
     def _build_toolbar(self) -> None:
-        bar = ttk.Frame(self, style="Page.TFrame")
+        bar = ttk.Frame(self.content, style="Page.TFrame")
         bar.pack(fill="x")
         self._toolbar = bar
         self._search = tk.StringVar()
         self._search.trace_add("write", lambda *_: self.refresh())
         self._search_entry = RoundEntry(
-            bar, textvariable=self._search, width=300,
+            bar, textvariable=self._search, width=200,
             placeholder="搜索名称 / 平台 / 备注",
             parent_bg=theme.CANVAS,
         )
-        self._search_entry.pack(side="left")
+        self._search_entry.pack(side="left", fill="x", expand=True)
         ttk.Label(bar, text="搜索", style="PageSub.TLabel").pack(
             side="left", padx=(8, theme.PAD),
         )
@@ -178,6 +186,7 @@ class SecretsPage(ttk.Frame):
             self._app.set_status("没有匹配的记录")
             return
         self._show_table()
+        self._fit_table(len(self._rows))
         from kv.ops.health import health_report
 
         expiring = set(health_report(store).expiring)
@@ -199,7 +208,7 @@ class SecretsPage(ttk.Frame):
     def _show_empty(self, mode: str) -> None:
         """显示空态卡（文案与按钮在 StateCards），visibility 在页面。"""
         self._states.show_empty(mode)
-        self._states.empty.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        self._states.empty.pack(fill="x", pady=(theme.GAP, 0))
         self._states.no_match.pack_forget()
         # 隐藏表格所在的父容器（Card）：pack_forget 只对顶层 pack 生效
         self._table.master.master.pack_forget()
@@ -208,11 +217,11 @@ class SecretsPage(ttk.Frame):
         self._states.show_no_match(query, status)
         self._table.master.master.pack_forget()
         self._states.empty.pack_forget()
-        self._states.no_match.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        self._states.no_match.pack(fill="x", pady=(theme.GAP, 0))
 
     def _show_table(self) -> None:
         if not self._table.master.master.winfo_manager():
-            self._table.master.master.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+            self._table.master.master.pack(fill="x", pady=(theme.GAP, 0))
         self._states.empty.pack_forget()
         self._states.no_match.pack_forget()
 

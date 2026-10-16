@@ -1,4 +1,4 @@
-"""可复用 GUI 组件。表格、表单对话框、确认框、状态栏、页头。"""
+"""可复用 GUI 组件。表格、表单对话框、确认框、状态栏、页头、可滚动页。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,48 @@ from typing import Any, Callable, Sequence
 
 from kv.gui import theme
 from kv.gui.controls import RoundButton, SlimScrollbar
+
+
+class ScrollPage(ttk.Frame):
+    """可滚动页：内容自然高度超过视口时自动出细滚动条。
+
+    背景：窗口高度被屏幕上限卡住（min(want, 88% 屏幕)），高 UI 缩放档位下
+    固定表单的总请求高度会超过视口——pack 对放不下的内容直接裁掉，
+    「设置页保存按钮被切一半」就是这么来的。子控件 pack 进 self.content。
+
+    滚轮滚动由 App 全局委派给指针所在页的 wheel_scroll()——页面全部
+    place 堆叠，各页自己 bind_all 会串页。
+    """
+
+    def __init__(self, parent: tk.Widget, *, padding=None) -> None:
+        super().__init__(parent, style="Page.TFrame",
+                         padding=padding if padding is not None else theme.PAD)
+        self._canvas = tk.Canvas(
+            self, bg=theme.CANVAS, highlightthickness=0, bd=0,
+            yscrollincrement=max(round(32 * theme.SCALE), 8),
+        )
+        self._canvas.pack(side="left", fill="both", expand=True)
+        self._sb = SlimScrollbar(self, self._canvas)
+        self.content = tk.Frame(self._canvas, bg=theme.CANVAS)
+        self._win = self._canvas.create_window(0, 0, window=self.content, anchor="nw")
+        self.content.bind("<Configure>", self._sync)
+        self._canvas.bind("<Configure>", self._sync)
+        self._sync()
+
+    def _sync(self, _event=None) -> None:
+        """内容变高/视口变宽时重算滚动区；不超高时收起滚动条并回顶。"""
+        self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+        self._canvas.itemconfigure(self._win, width=self._canvas.winfo_width())
+        overflow = self.content.winfo_reqheight() > self._canvas.winfo_height() + 4
+        if overflow:
+            if not self._sb.winfo_manager():
+                self._sb.pack(side="right", fill="y", before=self._canvas)
+        else:
+            self._sb.pack_forget()
+            self._canvas.yview_moveto(0)
+
+    def wheel_scroll(self, units: int) -> None:
+        self._canvas.yview_scroll(units, "units")
 
 
 class DataTable(ttk.Frame):
@@ -47,10 +89,17 @@ class DataTable(ttk.Frame):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self._headings = list(headings)
+        # 列宽是**比例**而非定值：声明值只定各列占比，实际宽度在 Configure 时
+        # 按视口分摊——定值列宽在高缩放档位必然超出视口且无横向滚动条可救。
+        total = sum(widths) if widths else sum([120] * len(self._columns))
+        self._ratios = [
+            (widths[i] if widths and i < len(widths) else 120) / total
+            for i in range(len(self._columns))
+        ]
         for i, col in enumerate(self._columns):
             self.tree.heading(col, text=headings[i], command=lambda c=col: self._sort_by(c))
-            w = widths[i] if widths and i < len(widths) else 120
-            self.tree.column(col, width=w, minwidth=60)
+            self.tree.column(col, width=theme.sp(120), minwidth=theme.sp(48))
+        self.tree.bind("<Configure>", lambda _e: self._fit_columns())
         self.tree.tag_configure("hover", background=theme.HOVER_BG)
         self.tree.bind("<Motion>", self._on_motion)
         self.tree.bind("<Leave>", lambda _e: self._clear_hover())
@@ -64,6 +113,15 @@ class DataTable(ttk.Frame):
     def clear(self) -> None:
         self._hover_item = None
         self.tree.delete(*self.tree.get_children())
+
+    def _fit_columns(self) -> None:
+        """按声明比例把视口宽分摊给各列——任何缩放档位下列都完整可见。"""
+        avail = self.tree.winfo_width() - theme.sp(10)  # 减自绘滚动条
+        if avail < theme.sp(120):
+            return
+        for i, col in enumerate(self._columns):
+            self.tree.column(col, width=max(round(avail * self._ratios[i]),
+                                            theme.sp(48)))
 
     def insert_row(self, values: Sequence[Any], *, tags: Sequence[str] = ()) -> str:
         return self.tree.insert("", "end", values=values, tags=tuple(tags))

@@ -48,7 +48,7 @@ class StateCards:
     # ------------------------------------------------------------ 空态
 
     def _build_empty(self, parent: tk.Widget) -> None:
-        self.empty = Card(parent)
+        self.empty = Card(parent, height=_px(340))
         body = self.empty.body
         self._art = tk.Canvas(
             body, width=_px(72), height=_px(72), bg=theme.SURFACE,
@@ -61,7 +61,7 @@ class StateCards:
         self._empty_title.pack(anchor="center")
         self._empty_hint = tk.Label(
             body, text="", font=theme.FONT, bg=theme.SURFACE,
-            fg=theme.TEXT_SECONDARY, justify="center",
+            fg=theme.TEXT_SECONDARY, justify="center", wraplength=_px(520),
         )
         self._empty_hint.pack(anchor="center", pady=(theme.PAD_SM, 0))
         row = tk.Frame(body, bg=theme.SURFACE)
@@ -99,7 +99,7 @@ class StateCards:
     # ------------------------------------------------------------ 无匹配
 
     def _build_no_match(self, parent: tk.Widget) -> None:
-        self.no_match = Card(parent)
+        self.no_match = Card(parent, height=_px(280))
         body = self.no_match.body
         tk.Label(
             body, text="没有匹配的记录", font=theme.FONT_HEADING,

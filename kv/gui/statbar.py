@@ -58,14 +58,19 @@ def platform_distribution(rows: Iterable, top: int = 4) -> list[tuple[str, int]]
 
 
 def _px(base: int) -> int:
-    return max(round(base * theme.SCALE), 1)
+    """仪表盘几何随 DPI 与 UI 缩放联动（字号在放大，间距不跟会裁字）。"""
+    return theme.sp(base)
 
 
 class StatCard(Card):
-    """一张指标卡：左侧语义色条 + 图标芯片 + 大数字 + 小标签。"""
+    """一张指标卡：左侧语义色条 + 图标芯片 + 大数字 + 小标签。
+
+    高度不写死——高缩放档位下写死的高度装不下两行文字，「已吊销 / 过期」
+    会被裁半（用户截图实测）；以 body 请求高自适应，下限 76sp。
+    """
 
     def __init__(self, parent, label: str, draw_icon, color: str) -> None:
-        super().__init__(parent, height=_px(88), width=1)
+        super().__init__(parent, width=1)
         self._label = label
         self._draw_icon = draw_icon
         self._color = color
@@ -84,8 +89,11 @@ class StatCard(Card):
     def _rebuild(self) -> None:
         for w in self.body.winfo_children():
             w.destroy()
-        self.configure(height=_px(88))
         self._build()
+
+    def _fit(self) -> None:
+        self.update_idletasks()
+        self.configure(height=max(self.body.winfo_reqheight() + 2, _px(76)))
 
     def _build(self) -> None:
         body = self.body
@@ -107,18 +115,14 @@ class StatCard(Card):
             text, text=self._label, font=theme.FONT_SMALL,
             bg=theme.SURFACE, fg=theme.TEXT_SECONDARY,
         ).pack(anchor="w")
+        self._fit()
 
 
 class DonutCard(Card):
-    """平台分布环形图：圆环段 + 图例（色点 + 平台 + 数量）。"""
+    """平台分布环形图：圆环段 + 图例（色点 + 平台 + 数量）。高度自适应。"""
 
     def __init__(self, parent) -> None:
-        super().__init__(parent, height=_px(88), width=1)
-        self._canvas = tk.Canvas(
-            self.body, width=_px(64), height=_px(64), bg=theme.SURFACE,
-            highlightthickness=0, bd=0,
-        )
-        self._legend = tk.Frame(self.body, bg=theme.SURFACE)
+        super().__init__(parent, width=1)
         theme.LISTENERS.append(self._rebuild)
         self.bind("<Destroy>", lambda _e: self._detach_listener())
 
@@ -131,7 +135,6 @@ class DonutCard(Card):
         self._render()
 
     def _rebuild(self) -> None:
-        self.configure(height=_px(88))
         self._render()
 
     def _render(self) -> None:
@@ -144,9 +147,11 @@ class DonutCard(Card):
         )
         self._canvas.pack(side="left", padx=(_px(8), 0), pady=_px(10))
         self._legend = tk.Frame(self.body, bg=theme.SURFACE)
-        self._legend.pack(side="left", padx=(_px(6), 0), pady=_px(12), fill="x")
+        self._legend.pack(side="left", padx=(_px(6), 0), pady=_px(10), fill="x")
         self._draw_donut(segments)
         self._draw_legend(segments)
+        self.update_idletasks()
+        self.configure(height=max(self.body.winfo_reqheight() + 2, _px(84)))
 
     def _draw_donut(self, segments: list[tuple[str, int]]) -> None:
         c = self._canvas
@@ -189,11 +194,16 @@ class DonutCard(Card):
 
 
 class StatBar(tk.Frame):
-    """一行仪表盘：四张指标卡 + 分布环形图。update(store) 全量重算。"""
+    """仪表盘：四张指标卡 + 分布环形图。update(store) 全量重算。
+
+    栅格重排：视口放得下就 1 行 6 张，放不下（高缩放档位）自动折成
+    3 列 × 2 行——横向硬挤的结果就是用户截图里「30 天内到」被裁。
+    """
 
     def __init__(self, parent):
         super().__init__(parent, bg=theme.CANVAS)
-        self._cards: list[StatCard] = []
+        self._cols = 0
+        self._cells: list[tk.Widget] = []
         specs = (
             ("全部", icons.draw_layers, theme.TEXT, "total"),
             ("启用", icons.draw_key, theme.SUCCESS, "active"),
@@ -202,23 +212,42 @@ class StatBar(tk.Frame):
         )
         for label, draw, color, attr in specs:
             card = StatCard(self, label, draw, color)
-            card.pack(side="left", fill="x", expand=True, padx=(0, theme.GAP))
             card._attr = attr  # noqa: SLF001 —— 行内规格表驱动，见 update()
-            self._cards.append(card)
+            self._cells.append(card)
         self._donut = DonutCard(self)
-        self._donut.pack(side="left", fill="x", expand=True)
+        self._cells.append(self._donut)
+        self.bind("<Configure>", lambda _e: self._reflow())
+        theme.LISTENERS.append(self._reflow)
+        self._reflow()
+
+    def _reflow(self) -> None:
+        width = self.winfo_width()
+        if width < 10:
+            return
+        cols = 3 if width < theme.sp(1150) else 6
+        if cols == self._cols:
+            return
+        self._cols = cols
+        for i, cell in enumerate(self._cells):
+            cell.grid_forget()
+            cell.grid(row=i // cols, column=i % cols, sticky="nsew",
+                      padx=(0, theme.GAP), pady=(0, theme.GAP))
+        for c in range(cols):
+            self.columnconfigure(c, weight=1, uniform="stat")
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=0)
 
     def update(self, store) -> None:  # noqa: A003 —— 与 Tk 习惯一致
         """从 store 重算指标并重画。store 为 None 时全归零。"""
         if store is None:
-            for card in self._cards:
-                card.set_value(0)
+            for cell in self._cells[:-1]:
+                cell.set_value(0)
             self._donut.set_segments([])
             return
         from kv.ops.health import health_report
 
         rows = store.list_secrets()
         metrics = collect_metrics(rows, health_report(store).expiring)
-        for card in self._cards:
+        for card in self._cells[:-1]:
             card.set_value(getattr(metrics, card._attr))
         self._donut.set_segments(platform_distribution(rows))

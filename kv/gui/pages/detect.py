@@ -8,11 +8,15 @@ from typing import Any
 
 from kv.gui import icons, theme
 from kv.gui.controls import Card, RoundButton
-from kv.gui.widgets import DataTable, PageHeader
+from kv.gui.widgets import DataTable, PageHeader, ScrollPage
 
 DET_COLS = ("platform", "confidence", "preview", "evidence")
 DET_HEADS = ("平台", "置信度", "预览", "依据")
 DET_WIDTHS = (120, 80, 200, 240)
+
+
+def _px(base: int) -> int:
+    return theme.sp(base)
 
 
 def _lines_height(lines: int) -> int:
@@ -23,31 +27,20 @@ def _lines_height(lines: int) -> int:
     return line * lines + 2
 
 
-class DetectPage(ttk.Frame):
+class DetectPage(ScrollPage):
     def __init__(self, parent: tk.Widget, *, app) -> None:
-        super().__init__(parent, padding=theme.PAD, style="Page.TFrame")
+        super().__init__(parent)
         self._app = app
         self._build()
 
     def _build(self) -> None:
-        PageHeader(self, "检测", "粘贴文本或选文件，找出其中的密钥形态",
+        c = self.content
+        PageHeader(c, "检测", "粘贴文本或选文件，找出其中的密钥形态",
                    draw_icon=icons.draw_search).pack(
             anchor="w", pady=(0, theme.GAP),
         )
-        # 底部区先占位：中部结果表格 expand 后不会把它挤出窗口
-        st_card = Card(self, height=theme.CONTROL_HEIGHT + theme.PAD_SM)
-        st_card.pack(side="bottom", fill="x", pady=(theme.PAD_SM, 0))
-        st_bar = ttk.Frame(st_card.body)
-        st_bar.pack(fill="both", expand=True, padx=1, pady=1)
-        RoundButton(st_bar, "运行 selftest --golden", self._run_selftest).pack(side="left")
-        self._gate_label = ttk.Label(st_bar, text="", font=theme.FONT_SMALL)
-        self._gate_label.pack(side="left", padx=theme.PAD)
-        ttk.Label(self, text="规则自测", style="PageSub.TLabel").pack(
-            side="bottom", anchor="w",
-        )
-
-        ttk.Label(self, text="输入文本", style="PageSub.TLabel").pack(anchor="w")
-        input_card = Card(self, height=_lines_height(6))
+        ttk.Label(c, text="输入文本", style="PageSub.TLabel").pack(anchor="w")
+        input_card = Card(c, height=_lines_height(6))
         input_card.pack(fill="x", pady=(theme.PAD_SM, 0))
         self._text = tk.Text(
             input_card.body, height=6, font=theme.FONT_MONO, wrap="word",
@@ -55,7 +48,7 @@ class DetectPage(ttk.Frame):
             padx=theme.PAD_SM, pady=theme.PAD_SM,
         )
         self._text.pack(fill="both", expand=True, padx=1, pady=1)
-        bar = ttk.Frame(self, style="Page.TFrame")
+        bar = ttk.Frame(c, style="Page.TFrame")
         bar.pack(fill="x", pady=(theme.GAP, 0))
         RoundButton(bar, "检测文本", self._detect_text, kind="accent",
                     parent_bg=theme.CANVAS).pack(side="left")
@@ -63,15 +56,30 @@ class DetectPage(ttk.Frame):
                     parent_bg=theme.CANVAS).pack(side="left", padx=theme.GAP)
         RoundButton(bar, "清空", lambda: self._text.delete("1.0", "end"),
                     parent_bg=theme.CANVAS).pack(side="left")
-        ttk.Label(self, text="检测结果", style="PageSub.TLabel").pack(
+        ttk.Label(c, text="检测结果", style="PageSub.TLabel").pack(
             anchor="w", pady=(theme.GAP, 0),
         )
-        result_card = Card(self)
-        result_card.pack(fill="both", expand=True, pady=(theme.PAD_SM, 0))
+        self._result_card = Card(c, height=_px(240))
+        self._result_card.pack(fill="x", pady=(theme.PAD_SM, 0))
         self._table = DataTable(
-            result_card.body, DET_COLS, headings=DET_HEADS, widths=DET_WIDTHS,
+            self._result_card.body, DET_COLS, headings=DET_HEADS, widths=DET_WIDTHS,
         )
         self._table.pack(fill="both", expand=True, padx=1, pady=1)
+        # 规则自测：正常流排最后（曾锚在页底占位，页身可滚后不再特殊）
+        ttk.Label(c, text="规则自测", style="PageSub.TLabel").pack(
+            anchor="w", pady=(theme.GAP, 0),
+        )
+        st_card = Card(c, height=theme.CONTROL_HEIGHT + theme.PAD_SM)
+        st_card.pack(fill="x", pady=(theme.PAD_SM, 0))
+        st_bar = ttk.Frame(st_card.body)
+        st_bar.pack(fill="both", expand=True, padx=1, pady=1)
+        RoundButton(st_bar, "运行 selftest --golden", self._run_selftest).pack(side="left")
+        self._gate_label = ttk.Label(st_bar, text="", font=theme.FONT_SMALL)
+        self._gate_label.pack(side="left", padx=theme.PAD)
+
+    def _fit_results(self, n: int) -> None:
+        visible = min(max(n, 2), 8)
+        self._result_card.configure(height=theme.ROW_HEIGHT * (visible + 1) + _px(12))
 
     def on_show(self) -> None:
         self._update_gate()
@@ -116,6 +124,7 @@ class DetectPage(ttk.Frame):
         self._table.clear()
         for r in results:
             self._table.insert_row((r["platform"], r["confidence"], r["preview"], r["evidence"]))
+        self._fit_results(len(results))
         self._app.set_status(f"检测到 {len(results)} 个候选", color=theme.SUCCESS if results else "")
 
     def _run_selftest(self) -> None:

@@ -1,4 +1,9 @@
-"""设置页：初始化 vault、健康检查、配置项、关于。"""
+"""设置页：初始化 vault、健康检查、配置项、关于。
+
+页身是 ScrollPage——高 UI 缩放档位下固定表单总高会超过视口（窗口高度
+被屏幕上限卡住），pack 对放不下的内容直接裁掉，「保存按钮被切一半」
+就是这么来的；子控件全部挂 self.content。
+"""
 
 from __future__ import annotations
 
@@ -9,29 +14,30 @@ from tkinter import messagebox, ttk
 from kv import __version__
 from kv.gui import icons, theme
 from kv.gui.controls import Card, RoundButton, RoundEntry
-from kv.gui.widgets import PageHeader
+from kv.gui.widgets import PageHeader, ScrollPage
 
 
-class SettingsPage(ttk.Frame):
+class SettingsPage(ScrollPage):
     def __init__(self, parent: tk.Widget, *, app) -> None:
-        super().__init__(parent, padding=theme.PAD_LG, style="Page.TFrame")
+        super().__init__(parent, padding=theme.PAD_LG)
         self._app = app
         self._build()
 
     def _build(self) -> None:
-        PageHeader(self, "设置", "初始化 vault、健康检查与配置项",
+        c = self.content
+        PageHeader(c, "设置", "初始化 vault、健康检查与配置项",
                    draw_icon=icons.draw_sliders).pack(
             anchor="w", pady=(0, theme.GAP),
         )
-        info_card = Card(self)
-        info_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
+        info_card = Card(c, height=theme.sp(240))
+        info_card.pack(fill="x", pady=(theme.GAP, 0))
         self._info = tk.Text(
-            info_card.body, height=10, font=theme.FONT_MONO, state="disabled",
+            info_card.body, font=theme.FONT_MONO, state="disabled",
             bg=theme.SURFACE, wrap="word", padx=theme.PAD, pady=theme.PAD,
             fg=theme.TEXT, relief="flat", bd=0, highlightthickness=0,
         )
         self._info.pack(fill="both", expand=True, padx=1, pady=1)
-        bar = ttk.Frame(self, style="Page.TFrame")
+        bar = ttk.Frame(c, style="Page.TFrame")
         bar.pack(fill="x", pady=(theme.PAD, 0))
         RoundButton(bar, "初始化 Vault", self._do_init, kind="accent",
                     parent_bg=theme.CANVAS).pack(side="left", padx=(0, theme.GAP))
@@ -42,7 +48,7 @@ class SettingsPage(ttk.Frame):
         RoundButton(bar, "关于", self._show_about,
                     parent_bg=theme.CANVAS).pack(side="left")
         self._settings_frame = ttk.LabelFrame(
-            self, text="配置项", padding=theme.PAD, style="Page.TLabelframe",
+            c, text="配置项", padding=theme.PAD, style="Page.TLabelframe",
         )
         self._settings_frame.pack(fill="x", pady=(theme.PAD, 0))
         self._setting_vars: dict[str, tk.StringVar] = {}

@@ -1,8 +1,7 @@
 """主窗口：侧边栏导航 + 内容区页面切换。
 
-侧边栏是**一整块 Canvas**：垂直渐变底、品牌区、分组导航、页脚版本全部
-手绘在画布上。用 tk.Label/Frame 拼侧边栏的话，每个不透明控件都会在渐变
-上盖出一块色差——手绘是 tkinter 里唯一无色差的深色渐变做法。
+侧边栏整体在 sidebar.py（一整块渐变 Canvas）；这里只管布局、页面注册
+与全局快捷键。
 """
 
 from __future__ import annotations
@@ -10,24 +9,13 @@ from __future__ import annotations
 import queue
 import threading
 import tkinter as tk
-from tkinter import font as tkfont, ttk
+from tkinter import ttk
 from typing import Any, Callable
 
-from kv import __version__
-from kv.gui import icons, motion, paint, theme
+from kv.gui import motion, theme
 from kv.gui.icon import apply as apply_app_icon
+from kv.gui.sidebar import Sidebar
 from kv.gui.widgets import StatusLabel
-
-NAV_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
-    ("密钥", [("secrets", "密钥管理")]),
-    ("工具", [("detect", "检测"), ("capture", "捕获"), ("ingest", "批量操作")]),
-    ("系统", [("security", "安全"), ("settings", "设置")]),
-]
-
-
-def _px(base: int) -> int:
-    """侧边栏几何：随 DPI 与 UI 缩放联动（图标/间距要跟字一起放大）。"""
-    return theme.sp(base)
 
 
 class App(tk.Tk):
@@ -67,7 +55,32 @@ class App(tk.Tk):
         self.bind_all("<Control-minus>", lambda e: self._zoom_by(-0.05))
         self.bind_all("<Control-k>", lambda e: self._open_palette())
         self.bind_all("<Control-f>", self._focus_search)
+        self.bind_all("<MouseWheel>", self._on_wheel)
         self.after(50, self._drain_queue)
+
+    def _on_wheel(self, event) -> str:
+        """滚轮委派：指针所在的页可滚则滚它。
+
+        页面全部 place 堆叠，各页自己 bind_all 会串页——所以只有这里绑。
+        Treeview/Text/Listbox 有自己的类绑定滚动，不抢；Ctrl 按下时让位
+        给 Ctrl+滚轮缩放。
+        """
+        if event.state & 0x0004:
+            return ""
+        w = self.winfo_containing(event.x_root, event.y_root)
+        while w is not None and w is not self:
+            if w.winfo_class() in ("Treeview", "Text", "Listbox"):
+                return ""  # 内建滚动控件自己处理
+            if w is self._sidebar:
+                self._sidebar.wheel_scroll(-(event.delta // 120))
+                return "break"
+            if any(w is p for p in self._pages.values()):
+                if hasattr(w, "wheel_scroll"):
+                    w.wheel_scroll(-(event.delta // 120))
+                    return "break"
+                return ""
+            w = w.master
+        return ""
 
     def _open_palette(self) -> None:
         from kv.gui.palette import open_palette
@@ -118,211 +131,10 @@ class App(tk.Tk):
     def _build_layout(self) -> None:
         # 状态栏必须先 pack——后 pack 的 expand 内容区会把它挤出窗口
         self._status = StatusLabel(self)
-        self._build_sidebar()
+        self._sidebar = Sidebar(self, on_navigate=self.show_page)
+        self._sidebar.pack(side="left", fill="y")
         self._content = tk.Frame(self, bg=theme.CANVAS)
         self._content.pack(side="left", fill="both", expand=True)
-
-    # ------------------------------------------------------------ 侧边栏
-
-    def _build_sidebar(self) -> None:
-        self._sidebar = tk.Canvas(
-            self, width=theme.SIDEBAR_WIDTH, highlightthickness=0, bd=0,
-            bg=theme.SIDEBAR_TOP,
-        )
-        self._sidebar.pack(side="left", fill="y")
-        self._indicator_y = motion.Spring(self, self._place_indicator)
-        self._indicator_item: str | None = None
-        self._sidebar.bind("<Configure>", lambda _e: self._paint_sidebar())
-        theme.LISTENERS.append(self._sync_sidebar_width)
-        theme.LISTENERS.append(self._paint_sidebar)
-        self._sync_sidebar_width()
-
-    def _sync_sidebar_width(self) -> None:
-        """侧边栏宽度随 UI 缩放长——否则用户放大字体后行内容挤满整栏。"""
-        desired = _px(252)
-        if abs(self._sidebar.winfo_reqwidth() - desired) > 2:
-            self._sidebar.configure(width=desired)
-
-    def _row_look(self, key: str) -> tuple[str, str]:
-        """一行的 (底色, 前景色)。active > hover > 静置。"""
-        if key == self._current:
-            return theme.SIDEBAR_ACTIVE_BG, theme.SIDEBAR_ACTIVE_FG
-        if key == self._hover_key:
-            return theme.SIDEBAR_ACTIVE_BG, theme.SIDEBAR_HOVER_FG
-        return "", theme.SIDEBAR_FG
-
-    def _paint_sidebar(self) -> None:
-        c = self._sidebar
-        w, h = c.winfo_width(), c.winfo_height()
-        if w < 10 or h < 10:
-            return
-        self._geo = (w, h)
-        paint.draw_v_gradient(c, theme.SIDEBAR_TOP, theme.SIDEBAR_BOTTOM, w, h)
-        self._row_geo.clear()
-        self._paint_brand(w)
-        self._paint_nav(w)
-        self._paint_footer(w, h)
-        self._paint_indicator()
-
-    def _sidebar_grid(self) -> dict:
-        """侧边栏排版网格：一套列位定义，品牌/分组/行/页脚共用。
-
-        图标列与文字列错开一档（icon_x / text_x），分组标题对齐**图标列**
-        ——三套左对齐互相打架是「散」的主要来源；全部尺寸走 _px（DPI×UI
-        缩放），用户放大字体时图标与间距跟着长，不再图标贴字。
-        """
-        icon_size = _px(18)
-        icon_x = _px(26)
-        return {
-            "margin": _px(16),
-            "inset": _px(10),
-            "icon_size": icon_size,
-            "icon_x": icon_x,
-            "icon_cx": icon_x + icon_size // 2,
-            "text_x": icon_x + icon_size + _px(16),
-            "row_h": _px(42),
-            "section_h": _px(32),
-            "group_gap": _px(12),
-        }
-
-    def _paint_brand(self, w: int) -> None:
-        c = self._sidebar
-        g = self._sidebar_grid()
-        logo_size = _px(34)
-        cy = _px(56)
-        logo_cx = g["margin"] + logo_size // 2
-        icons.draw_logo(c, logo_cx, cy, logo_size, "#ffffff", "#7c9bff")
-        title_x = g["margin"] + logo_size + _px(12)
-        c.create_text(
-            title_x, cy, text="KeyVault", anchor="w", fill="#ffffff",
-            font=theme.FONT_HEADING,
-        )
-        # 副标题与标题左对齐（曾对齐到 logo 左缘，视觉上歪向一侧）
-        c.create_text(
-            title_x, cy + _px(24), text="本地密钥保管箱", anchor="w",
-            fill=theme.SIDEBAR_MUTED, font=theme.FONT_SUBTITLE,
-        )
-
-    def _paint_nav(self, w: int) -> None:
-        c = self._sidebar
-        g = self._sidebar_grid()
-        y = _px(112)
-        for section, entries in NAV_SECTIONS:
-            c.create_text(
-                g["icon_x"], y + _px(10), text=section, anchor="w",
-                fill=theme.SIDEBAR_SECTION, font=theme.FONT_SUBTITLE,
-            )
-            y += g["section_h"]
-            for key, label in entries:
-                bg, fg = self._row_look(key)
-                if bg:
-                    pts = paint.round_points(
-                        g["inset"], y, w - g["inset"], y + g["row_h"] - 4, _px(9),
-                    )
-                    c.create_polygon(*pts, fill=bg, outline="", smooth=True)
-                icons.ICONS[key](c, g["icon_cx"], y + g["row_h"] // 2 - 2,
-                                 g["icon_size"], fg)
-                c.create_text(
-                    g["text_x"], y + g["row_h"] // 2 - 2, text=label, anchor="w",
-                    fill=fg, font=theme.FONT, tags=(f"row-{key}",),
-                )
-                self._row_geo[key] = (y, g["row_h"])
-                y += g["row_h"]
-            y += g["group_gap"]
-        for key in self._row_geo:
-            c.tag_bind(f"row-{key}", "<Button-1>", lambda e, k=key: self.show_page(k))
-            c.tag_bind(f"row-{key}", "<Enter>", lambda e, k=key: self._set_hover(k))
-            c.tag_bind(f"row-{key}", "<Leave>", lambda e: self._set_hover(""))
-
-    def _paint_footer(self, w: int, h: int) -> None:
-        c = self._sidebar
-        g = self._sidebar_grid()
-        x = g["icon_x"]
-        y = h - _px(78)
-        c.create_line(_px(16), y, w - _px(16), y, fill=theme.SIDEBAR_HAIRLINE, width=1)
-        # Ctrl+K 提示：描边胶囊 + 键位文字，可点的视觉暗示
-        label = "Ctrl"
-        f = tkfont.Font(font=theme.FONT_SMALL)
-        lw = f.measure(label)
-        c.create_rectangle(
-            x, y + _px(12), x + lw + _px(12), y + _px(30),
-            outline=theme.SIDEBAR_MUTED, width=1,
-        )
-        c.create_text(
-            x + lw / 2 + _px(6), y + _px(21), text=label,
-            fill=theme.SIDEBAR_MUTED, font=theme.FONT_SMALL,
-        )
-        c.create_text(
-            x + lw + _px(20), y + _px(21), text="+ K  快速复制密钥",
-            anchor="w", fill=theme.SIDEBAR_MUTED, font=theme.FONT_SMALL,
-        )
-        c.create_text(
-            x, y + _px(46), text=f"kv {__version__} · 数据不出本机",
-            anchor="w", fill=theme.SIDEBAR_SECTION, font=theme.FONT_SUBTITLE,
-        )
-
-    def _set_hover(self, key: str) -> None:
-        if key == self._hover_key:
-            return
-        self._hover_key = key
-        self._paint_sidebar()
-
-    def _paint_indicator(self) -> None:
-        """主色小条落在当前行左侧（整块侧边栏重画后的静态落位）。"""
-        geo = self._row_geo.get(self._current)
-        if not geo:
-            return
-        row_y, row_h = geo
-        y = self._indicator_y.value
-        if abs(y - row_y) > row_h * 1.6:  # 弹簧值已过期（重建后），直接落位
-            y = row_y
-            self._indicator_y.jump(y)
-        self._place_indicator(y)
-
-    def _place_indicator(self, y: float) -> None:
-        """画/重画指示条。弹簧飞行时每帧删旧画新，不拖影。"""
-        geo = self._row_geo.get(self._current)
-        if not geo:
-            return
-        c = self._sidebar
-        if self._indicator_item:
-            try:
-                c.delete(self._indicator_item)
-            except tk.TclError:
-                pass
-        row_y, row_h = geo
-        pts = paint.round_points(
-            _px(14), y + _px(9), _px(17), y + row_h - _px(13), _px(2),
-        )
-        self._indicator_item = c.create_polygon(
-            *pts, fill=theme.SIDEBAR_INDICATOR, outline="", smooth=True,
-        )
-
-    def show_page(self, key: str) -> None:
-        if key not in self._row_geo:
-            # 侧边栏还没画好（首帧）：先抬页面（注册已完成），指示条等几何就绪
-            self._current = key
-            page = self._pages.get(key)
-            if page is not None:
-                page.tkraise()
-                if hasattr(page, "on_show"):
-                    page.on_show()
-            return
-        if key == self._current:
-            return
-        self._current = key
-        self._hover_key = ""
-        self._paint_sidebar()
-        y, _ = self._row_geo[key]
-        self._indicator_y.to(y)
-        for k, page in self._pages.items():
-            if k == key:
-                page.tkraise()
-                if hasattr(page, "on_show"):
-                    page.on_show()
-                self._slide_in(page, k)
-
-    # ------------------------------------------------------------ 页面
 
     def _register_pages(self) -> None:
         from kv.gui.pages.capture import CapturePage
@@ -344,6 +156,19 @@ class App(tk.Tk):
             page = cls(self._content, app=self)
             page.place(relx=0, rely=0, relwidth=1, relheight=1)
             self._pages[key] = page
+
+    def show_page(self, key: str) -> None:
+        """切页 = 侧边栏高亮 + 内容区抬页 + 轻滑入。"""
+        if key == self._current:
+            return
+        self._current = key
+        self._sidebar.set_current(key)
+        for k, page in self._pages.items():
+            if k == key:
+                page.tkraise()
+                if hasattr(page, "on_show"):
+                    page.on_show()
+                self._slide_in(page, k)
 
     def _slide_in(self, page: tk.Widget, key: str) -> None:
         """新页面从右侧 18px 轻滑入（临界阻尼弹簧）。首次切换无动画。"""

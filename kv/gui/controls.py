@@ -68,8 +68,9 @@ class RoundEntry(tk.Canvas):
     def __init__(self, parent: tk.Widget, *, textvariable=None, show: str = "",
                  width: int = 200, font=None, placeholder: str = "",
                  parent_bg: str = theme.SURFACE) -> None:
+        # width 是逻辑像素：字体随 UI 缩放长大，输入框不跟就会裁占位符
         super().__init__(
-            parent, width=width, height=theme.CONTROL_HEIGHT,
+            parent, width=theme.sp(width), height=theme.CONTROL_HEIGHT,
             bg=parent_bg, highlightthickness=0, bd=0,
         )
         self._font = font or theme.FONT
