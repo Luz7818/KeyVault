@@ -128,8 +128,8 @@ class Sidebar(tk.Canvas):
         # 固定 24px 偏移在高缩放下小于标题行高的半，两行字直接叠在一起
         f_title = tkfont.Font(font=theme.FONT_HEADING)
         f_sub = tkfont.Font(font=theme.FONT_SUBTITLE)
-        sub_cy = (cy + f_title.metrics("linespace") // 2
-                  + _px(8) + f_sub.metrics("linespace") // 2)
+        # 行高盒相接即可——linespace 自带内边距，字形之间仍留有呼吸空隙
+        sub_cy = cy + f_title.metrics("linespace") // 2 + f_sub.metrics("linespace") // 2
         # 副标题与标题左对齐（曾对齐到 logo 左缘，视觉上歪向一侧）
         self.create_text(
             title_x, sub_cy, text="本地密钥保管箱", anchor="w",
