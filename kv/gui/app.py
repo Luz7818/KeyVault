@@ -26,7 +26,8 @@ NAV_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
 
 
 def _px(base: int) -> int:
-    return max(round(base * theme.SCALE), 1)
+    """侧边栏几何：随 DPI 与 UI 缩放联动（图标/间距要跟字一起放大）。"""
+    return theme.sp(base)
 
 
 class App(tk.Tk):
@@ -132,7 +133,15 @@ class App(tk.Tk):
         self._indicator_y = motion.Spring(self, self._place_indicator)
         self._indicator_item: str | None = None
         self._sidebar.bind("<Configure>", lambda _e: self._paint_sidebar())
+        theme.LISTENERS.append(self._sync_sidebar_width)
         theme.LISTENERS.append(self._paint_sidebar)
+        self._sync_sidebar_width()
+
+    def _sync_sidebar_width(self) -> None:
+        """侧边栏宽度随 UI 缩放长——否则用户放大字体后行内容挤满整栏。"""
+        desired = _px(252)
+        if abs(self._sidebar.winfo_reqwidth() - desired) > 2:
+            self._sidebar.configure(width=desired)
 
     def _row_look(self, key: str) -> tuple[str, str]:
         """一行的 (底色, 前景色)。active > hover > 静置。"""
@@ -155,46 +164,71 @@ class App(tk.Tk):
         self._paint_footer(w, h)
         self._paint_indicator()
 
+    def _sidebar_grid(self) -> dict:
+        """侧边栏排版网格：一套列位定义，品牌/分组/行/页脚共用。
+
+        图标列与文字列错开一档（icon_x / text_x），分组标题对齐**图标列**
+        ——三套左对齐互相打架是「散」的主要来源；全部尺寸走 _px（DPI×UI
+        缩放），用户放大字体时图标与间距跟着长，不再图标贴字。
+        """
+        icon_size = _px(18)
+        icon_x = _px(26)
+        return {
+            "margin": _px(16),
+            "inset": _px(10),
+            "icon_size": icon_size,
+            "icon_x": icon_x,
+            "icon_cx": icon_x + icon_size // 2,
+            "text_x": icon_x + icon_size + _px(12),
+            "row_h": _px(40),
+            "section_h": _px(30),
+            "group_gap": _px(10),
+        }
+
     def _paint_brand(self, w: int) -> None:
         c = self._sidebar
-        logo_size = _px(30)
+        g = self._sidebar_grid()
+        logo_size = _px(34)
         cy = _px(56)
-        icons.draw_logo(c, _px(44), cy, logo_size, "#ffffff", "#7c9bff")
+        logo_cx = g["margin"] + logo_size // 2
+        icons.draw_logo(c, logo_cx, cy, logo_size, "#ffffff", "#7c9bff")
+        title_x = g["margin"] + logo_size + _px(10)
         c.create_text(
-            _px(68), cy, text="KeyVault", anchor="w", fill="#ffffff",
+            title_x, cy, text="KeyVault", anchor="w", fill="#ffffff",
             font=theme.FONT_HEADING,
         )
+        # 副标题与标题左对齐（曾对齐到 logo 左缘，视觉上歪向一侧）
         c.create_text(
-            _px(44), cy + _px(24), text="本地密钥保管箱", anchor="w",
+            title_x, cy + _px(24), text="本地密钥保管箱", anchor="w",
             fill=theme.SIDEBAR_MUTED, font=theme.FONT_SUBTITLE,
         )
 
     def _paint_nav(self, w: int) -> None:
         c = self._sidebar
+        g = self._sidebar_grid()
         y = _px(112)
-        inset = _px(10)
-        row_h = _px(42)
-        icon_size = _px(18)
         for section, entries in NAV_SECTIONS:
             c.create_text(
-                _px(44), y + _px(10), text=section, anchor="w",
+                g["icon_x"], y + _px(10), text=section, anchor="w",
                 fill=theme.SIDEBAR_SECTION, font=theme.FONT_SUBTITLE,
             )
-            y += _px(30)
+            y += g["section_h"]
             for key, label in entries:
                 bg, fg = self._row_look(key)
                 if bg:
-                    pts = paint.round_points(inset, y, w - inset, y + row_h - 4, _px(9))
+                    pts = paint.round_points(
+                        g["inset"], y, w - g["inset"], y + g["row_h"] - 4, _px(9),
+                    )
                     c.create_polygon(*pts, fill=bg, outline="", smooth=True)
-                icons.ICONS[key](c, _px(34) + icon_size // 2, y + row_h // 2 - 2,
-                                 icon_size, fg)
+                icons.ICONS[key](c, g["icon_cx"], y + g["row_h"] // 2 - 2,
+                                 g["icon_size"], fg)
                 c.create_text(
-                    _px(60), y + row_h // 2 - 2, text=label, anchor="w",
+                    g["text_x"], y + g["row_h"] // 2 - 2, text=label, anchor="w",
                     fill=fg, font=theme.FONT, tags=(f"row-{key}",),
                 )
-                self._row_geo[key] = (y, row_h)
-                y += row_h
-            y += _px(10)
+                self._row_geo[key] = (y, g["row_h"])
+                y += g["row_h"]
+            y += g["group_gap"]
         for key in self._row_geo:
             c.tag_bind(f"row-{key}", "<Button-1>", lambda e, k=key: self.show_page(k))
             c.tag_bind(f"row-{key}", "<Enter>", lambda e, k=key: self._set_hover(k))
@@ -202,26 +236,28 @@ class App(tk.Tk):
 
     def _paint_footer(self, w: int, h: int) -> None:
         c = self._sidebar
+        g = self._sidebar_grid()
+        x = g["icon_x"]
         y = h - _px(78)
-        c.create_line(_px(20), y, w - _px(20), y, fill=theme.SIDEBAR_HAIRLINE, width=1)
+        c.create_line(_px(16), y, w - _px(16), y, fill=theme.SIDEBAR_HAIRLINE, width=1)
         # Ctrl+K 提示：描边胶囊 + 键位文字，可点的视觉暗示
         label = "Ctrl"
         f = tkfont.Font(font=theme.FONT_SMALL)
         lw = f.measure(label)
         c.create_rectangle(
-            _px(44), y + _px(12), _px(44) + lw + _px(12), y + _px(30),
+            x, y + _px(12), x + lw + _px(12), y + _px(30),
             outline=theme.SIDEBAR_MUTED, width=1,
         )
         c.create_text(
-            _px(44) + lw / 2 + _px(6), y + _px(21), text=label,
+            x + lw / 2 + _px(6), y + _px(21), text=label,
             fill=theme.SIDEBAR_MUTED, font=theme.FONT_SMALL,
         )
         c.create_text(
-            _px(44) + lw + _px(20), y + _px(21), text="+ K  快速复制密钥",
+            x + lw + _px(20), y + _px(21), text="+ K  快速复制密钥",
             anchor="w", fill=theme.SIDEBAR_MUTED, font=theme.FONT_SMALL,
         )
         c.create_text(
-            _px(44), y + _px(46), text=f"kv {__version__} · 数据不出本机",
+            x, y + _px(46), text=f"kv {__version__} · 数据不出本机",
             anchor="w", fill=theme.SIDEBAR_SECTION, font=theme.FONT_SUBTITLE,
         )
 

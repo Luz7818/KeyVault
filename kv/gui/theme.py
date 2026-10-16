@@ -151,6 +151,12 @@ def _f(base: int) -> int:
     return max(round(base * SCALE * ZOOM), 9)
 
 
+def sp(base: int) -> int:
+    """含 DPI 与 UI 缩放的几何尺寸。图标/行高等与字一起缩放的间距用它——
+    只按 SCALE 缩的间距在用户放大字体后会相对变小（图标贴字）。"""
+    return max(round(base * SCALE * ZOOM), 1)
+
+
 def _resolve_mono_family() -> None:
     """Cascadia Mono 存在就用它（更现代的等宽），否则退回 Consolas。"""
     global MONO_FAMILY
