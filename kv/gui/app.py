@@ -179,10 +179,10 @@ class App(tk.Tk):
             "icon_size": icon_size,
             "icon_x": icon_x,
             "icon_cx": icon_x + icon_size // 2,
-            "text_x": icon_x + icon_size + _px(12),
-            "row_h": _px(40),
-            "section_h": _px(30),
-            "group_gap": _px(10),
+            "text_x": icon_x + icon_size + _px(16),
+            "row_h": _px(42),
+            "section_h": _px(32),
+            "group_gap": _px(12),
         }
 
     def _paint_brand(self, w: int) -> None:
@@ -192,7 +192,7 @@ class App(tk.Tk):
         cy = _px(56)
         logo_cx = g["margin"] + logo_size // 2
         icons.draw_logo(c, logo_cx, cy, logo_size, "#ffffff", "#7c9bff")
-        title_x = g["margin"] + logo_size + _px(10)
+        title_x = g["margin"] + logo_size + _px(12)
         c.create_text(
             title_x, cy, text="KeyVault", anchor="w", fill="#ffffff",
             font=theme.FONT_HEADING,
