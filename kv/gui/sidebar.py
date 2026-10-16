@@ -40,6 +40,8 @@ class Sidebar(tk.Canvas):
         self._on_navigate = on_navigate
         self._current = ""
         self._hover_key = ""
+        self._hover_bg: str | None = None
+        self._row_text: dict[str, str] = {}
         self._row_geo: dict[str, tuple[int, int]] = {}
         self._indicator_y = motion.Spring(self, self._place_indicator)
         self._indicator_item: str | None = None
@@ -96,6 +98,9 @@ class Sidebar(tk.Canvas):
         paint.draw_v_gradient(self, theme.SIDEBAR_TOP, theme.SIDEBAR_BOTTOM,
                               w, content_h, steps=140)
         self._row_geo.clear()
+        self._row_text.clear()
+        self._hover_bg = None
+        self._hover_key = ""
         self._paint_brand()
         nav_end = self._paint_nav(w)
         # 页脚锚在「视口底」与「导航结束」两者更靠下的位置：高缩放下导航
@@ -152,10 +157,11 @@ class Sidebar(tk.Canvas):
                     self.create_polygon(*pts, fill=bg, outline="", smooth=True)
                 icons.ICONS[key](self, g["icon_cx"], y + g["row_h"] // 2 - 2,
                                  g["icon_size"], fg)
-                self.create_text(
+                txt_id = self.create_text(
                     g["text_x"], y + g["row_h"] // 2 - 2, text=label, anchor="w",
                     fill=fg, font=theme.FONT, tags=(f"row-{key}",),
                 )
+                self._row_text[key] = txt_id
                 self._row_geo[key] = (y, g["row_h"])
                 y += g["row_h"]
             y += g["group_gap"]
@@ -193,10 +199,42 @@ class Sidebar(tk.Canvas):
         )
 
     def _set_hover(self, key: str) -> None:
+        """hover 走 O(1) 局部更新——整块重画每次要重铺 140 条渐变带，
+        鼠标扫过导航列就是一次全量重绘（卡顿源之一）。"""
         if key == self._hover_key:
             return
-        self._hover_key = key
-        self._paint()
+        old, self._hover_key = self._hover_key, key
+        if old and old != self._current and old in self._row_geo:
+            self._restore_row(old)
+        if key and key != self._current and key in self._row_geo:
+            self._apply_hover(key)
+
+    def _restore_row(self, key: str) -> None:
+        """撤掉 hover 底色块，该行文字回到静置色。"""
+        if self._hover_bg:
+            try:
+                self.delete(self._hover_bg)
+            except tk.TclError:
+                pass
+            self._hover_bg = None
+        if key in self._row_text:
+            self.itemconfigure(self._row_text[key], fill=theme.SIDEBAR_FG)
+
+    def _apply_hover(self, key: str) -> None:
+        """画 hover 底色块（垫到渐变上、文字下）并把该行文字提亮。"""
+        g = self._grid()
+        w = self.winfo_width()
+        y, row_h = self._row_geo[key]
+        pts = paint.round_points(
+            g["inset"], y, w - g["inset"], y + row_h - 4, _px(9),
+        )
+        self._hover_bg = self.create_polygon(*pts, fill=theme.SIDEBAR_ACTIVE_BG,
+                                             outline="", smooth=True)
+        # 色块垫在渐变上，但该行文字必须浮在色块上
+        if key in self._row_text:
+            self.tag_raise(self._row_text[key], self._hover_bg)
+        if key in self._row_text:
+            self.itemconfigure(self._row_text[key], fill=theme.SIDEBAR_HOVER_FG)
 
     def _paint_indicator(self) -> None:
         """主色小条落当前行。整块重画（hover/缩放）一律静态落位——弹簧值

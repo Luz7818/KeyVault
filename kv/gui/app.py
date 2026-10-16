@@ -44,8 +44,8 @@ class App(tk.Tk):
         self._pages: dict[str, tk.Widget] = {}
         self._page_slides: dict[str, motion.Spring] = {}
         self._current: str = ""
-        self._hover_key: str = ""
-        self._row_geo: dict[str, tuple[int, int]] = {}   # key -> (y, h)
+        self._zoom_pending: float | None = None
+        self._zoom_job: str | None = None
         self._build_layout()
         self._register_pages()
         self.show_page("secrets")
@@ -117,11 +117,25 @@ class App(tk.Tk):
         self._zoom_by(0.05 if event.delta > 0 else -0.05)
 
     def _zoom_by(self, delta: float) -> None:
-        zoom = theme.set_zoom(theme.ZOOM + delta)
+        """滚轮缩放**防抖**：连发只累积目标值，停手 140ms 后应用一次。
+
+        set_zoom 的级联（命名字体 + 全部 LISTENERS 重绘 + 写库）单次就要
+        几百毫秒，滚轮每 tick 同步跑全量就是「缩放太卡顿」的根因。
+        """
+        self._zoom_pending = round(min(max(
+            (self._zoom_pending if self._zoom_pending is not None else theme.ZOOM)
+            + delta, 0.85), 1.6), 2)
+        if self._zoom_job is None:
+            self._zoom_job = self.after(140, self._apply_zoom)
+
+    def _apply_zoom(self) -> None:
+        self._zoom_job = None
+        pending, self._zoom_pending = self._zoom_pending, None
+        zoom = theme.set_zoom(pending)
         store = self.store
         if store is not None:
             try:
-                store.set_setting("ui_scale", str(zoom))
+                store.set_setting("ui_scale", str(zoom))  # 一次手势只写一次库
             except Exception:
                 pass  # 缩放不因写库失败而中断
         self.set_status(f"界面缩放 {round(zoom * 100)}%（Ctrl+滚轮调整，自动保存）")

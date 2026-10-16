@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from dataclasses import dataclass
+from tkinter import font as tkfont
 from typing import Iterable
 
 from kv.gui import icons, theme
@@ -65,8 +66,8 @@ def _px(base: int) -> int:
 class StatCard(Card):
     """一张指标卡：左侧语义色条 + 图标芯片 + 大数字 + 小标签。
 
-    高度不写死——高缩放档位下写死的高度装不下两行文字，「已吊销 / 过期」
-    会被裁半（用户截图实测）；以 body 请求高自适应，下限 76sp。
+    高度以 body 请求高自适应（写死的高度在高缩放下裁字）。标签按**像素**
+    截断到卡片可用宽——栅格列宽随窗口变，按字符数截断在高缩放下必超。
     """
 
     def __init__(self, parent, label: str, draw_icon, color: str) -> None:
@@ -75,8 +76,10 @@ class StatCard(Card):
         self._draw_icon = draw_icon
         self._color = color
         self._value_var = tk.StringVar(value="0")
+        self._label_lbl: tk.Label | None = None
         self._build()
         theme.LISTENERS.append(self._rebuild)
+        self.bind("<Configure>", lambda _e: self._trim_label())
         self.bind("<Destroy>", lambda _e: self._detach_listener())
 
     def _detach_listener(self) -> None:
@@ -92,8 +95,23 @@ class StatCard(Card):
         self._build()
 
     def _fit(self) -> None:
-        self.update_idletasks()
+        # winfo_reqheight 在 pack 配置后即时有效，不需要 update_idletasks
+        # ——update_idletasks 会在缩放级联里同步跑整个布局队列（卡顿源）
         self.configure(height=max(self.body.winfo_reqheight() + 2, _px(76)))
+
+    def _trim_label(self) -> None:
+        """标签截到 (卡片宽 - 色条 - 芯片 - 内距) 内，超出加省略号。"""
+        if self._label_lbl is None or self.winfo_width() < 60:
+            return  # 未完成布局（首帧 width=1），无从截起
+        f = tkfont.Font(font=theme.FONT_SMALL)
+        avail = (self.winfo_width() - _px(4) - _px(34)
+                 - _px(10) - _px(8) - _px(12))
+        shown = self._label
+        while len(shown) > 2 and f.measure(shown) > avail:
+            shown = shown[:-1]
+        if shown != self._label:
+            shown = shown.rstrip() + "…"
+        self._label_lbl.config(text=shown)
 
     def _build(self) -> None:
         body = self.body
@@ -111,10 +129,11 @@ class StatCard(Card):
             text, textvariable=self._value_var, font=theme.FONT_HEADING,
             bg=theme.SURFACE, fg=theme.TEXT,
         ).pack(anchor="w")
-        tk.Label(
+        self._label_lbl = tk.Label(
             text, text=self._label, font=theme.FONT_SMALL,
             bg=theme.SURFACE, fg=theme.TEXT_SECONDARY,
-        ).pack(anchor="w")
+        )
+        self._label_lbl.pack(anchor="w")
         self._fit()
 
 
@@ -173,6 +192,11 @@ class DonutCard(Card):
             start -= extent
 
     def _draw_legend(self, segments: list[tuple[str, int]]) -> None:
+        # 图例可用宽 = 卡片宽 - 环形图 - 内距；按像素截断（按字符数截在
+        # 高缩放下必超宽，用户截图实测「ogle a」被硬裁）
+        f = tkfont.Font(font=theme.FONT_SMALL)
+        avail = max(self.winfo_width() - self._canvas.winfo_reqwidth()
+                    - _px(30), _px(60))
         for i, (label, count) in enumerate(segments[:5]):
             color = DONUT_COLORS[i % len(DONUT_COLORS)]
             row = tk.Frame(self._legend, bg=theme.SURFACE)
@@ -181,8 +205,11 @@ class DonutCard(Card):
                             bg=theme.SURFACE, highlightthickness=0, bd=0)
             dot.pack(side="left")
             dot.create_oval(1, 1, _px(7), _px(7), fill=color, outline=color)
-            # 长平台名截断 —— 图例宽受卡片约束，Label 会居中裁掉两端，更难看
-            shown = label if len(label) <= 10 else label[:9] + "…"
+            shown = label
+            while len(shown) > 2 and f.measure(shown) > avail - _px(34):
+                shown = shown[:-1]
+            if shown != label:
+                shown = shown.rstrip() + "…"
             tk.Label(
                 row, text=shown, font=theme.FONT_SMALL, bg=theme.SURFACE,
                 fg=theme.TEXT_SECONDARY,
@@ -207,8 +234,8 @@ class StatBar(tk.Frame):
         specs = (
             ("全部", icons.draw_layers, theme.TEXT, "total"),
             ("启用", icons.draw_key, theme.SUCCESS, "active"),
-            ("30 天内到期", icons.draw_bolt, theme.WARNING, "expiring"),
-            ("已吊销 / 过期", icons.draw_shield, theme.ERROR, "flagged"),
+            ("30天内到期", icons.draw_bolt, theme.WARNING, "expiring"),
+            ("吊销/过期", icons.draw_shield, theme.ERROR, "flagged"),
         )
         for label, draw, color, attr in specs:
             card = StatCard(self, label, draw, color)
@@ -232,8 +259,10 @@ class StatBar(tk.Frame):
             cell.grid_forget()
             cell.grid(row=i // cols, column=i % cols, sticky="nsew",
                       padx=(0, theme.GAP), pady=(0, theme.GAP))
-        for c in range(cols):
-            self.columnconfigure(c, weight=1, uniform="stat")
+        # 列配置必须全量重置：宽→窄折行后，旧的多余列 weight 残留会把
+        # 一半宽度分给空列，卡片挤在左半（全屏→小屏实测）
+        for c in range(6):
+            self.columnconfigure(c, weight=1 if c < cols else 0, uniform="stat")
         self.rowconfigure(0, weight=0)
         self.rowconfigure(1, weight=0)
 
