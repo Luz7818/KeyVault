@@ -305,14 +305,15 @@ class TabBar(ttk.Frame):
 class SlimScrollbar(tk.Canvas):
     """细圆角滚动条：6px 滑块，hover 加深，替换系统滚动条。"""
 
-    def __init__(self, parent: tk.Widget, target, *, orient: str = "vertical") -> None:
+    def __init__(self, parent: tk.Widget, target, *, orient: str = "vertical",
+                 bg: str = theme.SURFACE) -> None:
         self._orient = orient
         self._target = target
         thickness = max(round(8 * theme.SCALE), 6)
         if orient == "vertical":
-            super().__init__(parent, width=thickness, bg=theme.SURFACE, highlightthickness=0, bd=0)
+            super().__init__(parent, width=thickness, bg=bg, highlightthickness=0, bd=0)
         else:
-            super().__init__(parent, height=thickness, bg=theme.SURFACE, highlightthickness=0, bd=0)
+            super().__init__(parent, height=thickness, bg=bg, highlightthickness=0, bd=0)
         self._first = 0.0
         self._frac = 1.0
         self._hover = False

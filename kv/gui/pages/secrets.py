@@ -74,12 +74,15 @@ class SecretsPage(ScrollPage):
         bar.pack(fill="x")
         self._toolbar = bar
         self._search = tk.StringVar()
-        self._search.trace_add("write", lambda *_: self.refresh())
+        self._search_job: str | None = None
+        # 键入防抖：每击键同步全表重建在多记录时会卡手，停 120ms 查一次
+        self._search.trace_add("write", lambda *_: self._schedule_refresh())
         self._search_entry = RoundEntry(
             bar, textvariable=self._search, width=200,
             placeholder="搜索名称 / 平台 / 备注",
             parent_bg=theme.CANVAS,
         )
+        self._search_entry.entry.bind("<Escape>", lambda _e: self._clear_search())
         self._search_entry.pack(side="left", fill="x", expand=True)
         ttk.Label(bar, text="搜索", style="PageSub.TLabel").pack(
             side="left", padx=(8, theme.PAD),
@@ -111,22 +114,37 @@ class SecretsPage(ScrollPage):
         self._search_entry.entry.focus_set()
         self.refresh()
 
+    def _schedule_refresh(self) -> None:
+        """键入防抖：连击只保留最后一次，停 120ms 再查。"""
+        if self._search_job is not None:
+            self.after_cancel(self._search_job)
+        self._search_job = self.after(120, self._debounced_refresh)
+
+    def _debounced_refresh(self) -> None:
+        self._search_job = None
+        self.refresh()
+
+    def _clear_search(self) -> None:
+        """Esc 清空搜索词（trace 会触发防抖刷新），焦点留在框里继续输。"""
+        if self._search.get():
+            self._search.set("")
+
+    def hotkey_add(self) -> None:
+        """N 键入口（App 全局键委派，打字中不会到达这里）。"""
+        self._on_add()
+
     def focus_search(self) -> None:
         """Ctrl+F 落点：聚焦搜索框并全选现有词，方便直接覆盖输入。"""
         self._search_entry.entry.focus_set()
         self._search_entry.entry.select_range(0, "end")
 
     def _bind_keys(self) -> None:
-        """表格键盘层：Enter 详情 / Delete 删除 / Ctrl+C 复制 / F5 刷新。
-
-        都委托给右键菜单同一批方法——一个动作只有一个实现，键盘只是
-        多一条到达路径。
-        """
+        """表格键盘层：Enter 详情 / Delete 删除 / Ctrl+C 复制。
+        F5 刷新在 App 全局（工具提示对所有页面成立），这里不重复绑。"""
         tree = self._table.tree
         tree.bind("<Return>", lambda _e: self._on_show(self._sel_name()))
         tree.bind("<Delete>", lambda _e: self._on_delete(self._sel_name()))
         tree.bind("<Control-c>", self._copy_selected)
-        tree.bind("<F5>", lambda _e: self.refresh())
 
     def _copy_selected(self, _event=None) -> str:
         name = self._sel_name()

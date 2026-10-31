@@ -27,7 +27,9 @@ EMPTY_TEXTS = {
 
 
 def _px(base: int) -> int:
-    return max(round(base * theme.SCALE), 1)
+    """几何随 DPI 与 UI 缩放联动（sp = SCALE × ZOOM）——只乘 SCALE 的话
+    高 UI 缩放下卡片尺寸不跟字号长，字贴边裁字。"""
+    return theme.sp(base)
 
 
 class StateCards:
@@ -61,7 +63,7 @@ class StateCards:
         self._empty_title.pack(anchor="center")
         self._empty_hint = tk.Label(
             body, text="", font=theme.FONT, bg=theme.SURFACE,
-            fg=theme.TEXT_SECONDARY, justify="center", wraplength=_px(520),
+            fg=theme.TEXT_SECONDARY, justify="center", wraplength=theme.sp(520),
         )
         self._empty_hint.pack(anchor="center", pady=(theme.PAD_SM, 0))
         row = tk.Frame(body, bg=theme.SURFACE)

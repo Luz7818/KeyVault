@@ -120,8 +120,10 @@ class TestHealth(unittest.TestCase):
         _add(self.store, "soon", expires_at=(now + timedelta(days=10)).isoformat())
         _add(self.store, "later", expires_at=(now + timedelta(days=90)).isoformat())
         _add(self.store, "plain")
-        # plain 的 updated_at 是「现在」，要走 stale 分支得把 now 推到未来
-        report = health.health_report(self.store, now=now + timedelta(days=200))
+        # 报告时钟锚定 plain 自己的 updated_at：+200d 必然越过 180 天 stale 线，
+        # 也必然晚于上面两个 expires_at，断言对任何真实墙钟恒成立
+        created = datetime.fromisoformat(self.store.get("plain").updated_at)
+        report = health.health_report(self.store, now=created + timedelta(days=200))
         self.assertNotIn("soon", report.expiring)      # 200 天前早已过期 → 进 expired
         self.assertEqual(report.expired_count, 2)      # soon / later 都过期
         self.assertIn("later", report.stale)

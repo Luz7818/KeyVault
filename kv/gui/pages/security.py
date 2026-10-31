@@ -8,7 +8,7 @@ from typing import Any
 
 from kv.gui import icons, theme
 from kv.gui.controls import Card, RoundButton, RoundEntry, TabBar
-from kv.gui.widgets import DataTable, PageHeader
+from kv.gui.widgets import DataTable, PageHeader, track_wraplength
 
 SCAN_COLS = ("path", "line_no", "name", "platform", "status")
 SCAN_HEADS = ("文件", "行号", "密钥", "平台", "状态")
@@ -53,7 +53,8 @@ class SecurityPage(ttk.Frame):
             side="left", fill="x", expand=True,
         )
         RoundButton(bar, "浏览", self._pick_dir).pack(side="left", padx=theme.GAP)
-        RoundButton(bar, "扫描", self._do_scan, kind="accent").pack(side="left")
+        self._scan_btn = RoundButton(bar, "扫描", self._do_scan, kind="accent")
+        self._scan_btn.pack(side="left")
         scan_card = Card(self._scan_tab, parent_bg=theme.SURFACE)
         scan_card.pack(fill="both", expand=True, pady=(theme.GAP, 0))
         self._scan_table = DataTable(
@@ -61,11 +62,13 @@ class SecurityPage(ttk.Frame):
             rows=8,
         )
         self._scan_table.pack(fill="both", expand=True, padx=1, pady=1)
+        self._scan_table.tree.column("line_no", anchor="e")  # 行号右对齐
 
     def _build_audit(self) -> None:
         bar = ttk.Frame(self._audit_tab)
         bar.pack(fill="x")
-        RoundButton(bar, "加载日志", self._load_audit).pack(side="left")
+        self._audit_btn = RoundButton(bar, "加载日志", self._load_audit)
+        self._audit_btn.pack(side="left")
         RoundButton(bar, "校验链", self._verify_audit).pack(side="left", padx=theme.GAP)
         ttk.Label(bar, text="事件", style="Sub.TLabel").pack(side="left", padx=(theme.PAD, 4))
         self._audit_event = tk.StringVar(value="全部")
@@ -86,6 +89,7 @@ class SecurityPage(ttk.Frame):
             rows=9,
         )
         self._audit_table.pack(fill="both", expand=True, padx=1, pady=1)
+        self._audit_table.tree.column("id", anchor="e")  # 自增 ID 右对齐
         self._audit_events: list = []
 
     def _build_maint(self) -> None:
@@ -93,8 +97,16 @@ class SecurityPage(ttk.Frame):
         exp.pack(fill="x")
         RoundButton(exp, "标记过期记录", self._do_expire).pack(side="left")
         RoundButton(exp, "健康报告", self._do_health).pack(side="left", padx=theme.GAP)
-        self._expire_label = ttk.Label(exp, text="", font=theme.FONT_SMALL, wraplength=640)
+        self._expire_label = ttk.Label(exp, text="", font=theme.FONT_SMALL,
+                                       wraplength=theme.sp(640))
         self._expire_label.pack(side="left", padx=theme.PAD)
+        # 换行宽度 = 框宽 - 两个按钮占位：窄窗口里文案换行不与按钮挤在一行
+        track_wraplength(
+            self._expire_label, 640,
+            reserve=lambda: (sum(w.winfo_reqwidth() for w in exp.winfo_children()
+                                 if isinstance(w, tk.Canvas))
+                             + theme.GAP + theme.PAD * 2),
+        )
         pur = ttk.LabelFrame(self._maint_tab, text="清除", padding=theme.PAD)
         pur.pack(fill="x", pady=(theme.PAD, 0))
         self._purge_mode = tk.StringVar(value="zero")
@@ -102,17 +114,23 @@ class SecurityPage(ttk.Frame):
         ttk.Radiobutton(pur, text="删除（整行移除）", variable=self._purge_mode, value="delete").pack(anchor="w")
         btn_bar = ttk.Frame(pur)
         btn_bar.pack(fill="x", pady=(theme.GAP, 0))
-        RoundButton(btn_bar, "预览（dry-run）", lambda: self._do_purge(dry=True)).pack(side="left")
-        RoundButton(btn_bar, "执行清除", lambda: self._do_purge(dry=False), kind="danger").pack(side="left", padx=theme.GAP)
+        self._dry_btn = RoundButton(btn_bar, "预览（dry-run）",
+                                    lambda: self._do_purge(dry=True))
+        self._dry_btn.pack(side="left")
+        self._purge_btn = RoundButton(btn_bar, "执行清除",
+                                      lambda: self._do_purge(dry=False), kind="danger")
+        self._purge_btn.pack(side="left", padx=theme.GAP)
 
     def _build_backup(self) -> None:
-        ttk.Label(
+        info = ttk.Label(
             self._backup_tab, style="Sub.TLabel",
             text="备份是口令加密的明文导出（.kvb），可在任何 Windows 机器恢复——"
                  "DPAPI 绑定本机，重装系统后本库无法解密，备份是唯一出路。"
                  "口令是唯一凭据：丢失无法恢复，弱口令等于没加密。",
-            wraplength=720, justify="left",
-        ).pack(anchor="w", pady=(0, theme.GAP))
+            wraplength=theme.sp(720), justify="left",
+        )
+        info.pack(anchor="w", pady=(0, theme.GAP))
+        track_wraplength(info, 720)  # 换行宽度跟页面走，拉宽窗口/改缩放都重排
         exp = ttk.LabelFrame(self._backup_tab, text="导出备份", padding=theme.PAD)
         exp.pack(fill="x")
         pw_row = ttk.Frame(exp)
@@ -162,10 +180,18 @@ class SecurityPage(ttk.Frame):
             messagebox.showwarning("Gate 未通过", gate_message(), parent=self)
             return
         target = self._scan_dir.get().strip() or "."
+        # 忙碌置灰：扫描可长达数秒，不置灰的话连点会并发跑两趟
+        self._scan_btn.set_enabled(False)
         self._app.set_status(f"扫描 {target} …")
-        self._app.run_async(_run_scan, store, target, on_done=self._show_scan)
+        self._app.run_async(_run_scan, store, target,
+                            on_done=self._show_scan, on_error=self._scan_failed)
+
+    def _scan_failed(self, exc: Exception) -> None:
+        self._scan_btn.set_enabled(True)
+        self._app.set_status(f"扫描失败：{exc}", color=theme.ERROR)
 
     def _show_scan(self, result) -> None:
+        self._scan_btn.set_enabled(True)
         self._scan_table.clear()
         for hit in result.hits:
             self._scan_table.insert_row((hit.path, str(hit.line_no), hit.name, hit.platform, hit.status))
@@ -179,10 +205,17 @@ class SecurityPage(ttk.Frame):
         store = self._app.store
         if store is None:
             return
+        self._audit_btn.set_enabled(False)
         self._app.set_status("加载审计日志…")
-        self._app.run_async(store.list_audit, limit=200, on_done=self._show_audit)
+        self._app.run_async(store.list_audit, limit=200,
+                            on_done=self._show_audit, on_error=self._audit_failed)
+
+    def _audit_failed(self, exc: Exception) -> None:
+        self._audit_btn.set_enabled(True)
+        self._app.set_status(f"加载审计失败：{exc}", color=theme.ERROR)
 
     def _show_audit(self, events: list) -> None:
+        self._audit_btn.set_enabled(True)
         self._audit_events = events
         kinds = ("全部",) + tuple(sorted({e["event"] for e in events}))
         self._audit_event_cb.configure(values=kinds)
@@ -341,19 +374,33 @@ class SecurityPage(ttk.Frame):
         ):
             return
         if dry:
+            self._set_purge_busy(True)
             self._app.set_status("预览中…")
             self._app.run_async(
-                _count_purge_targets, store, on_done=lambda n: self._app.set_status(
-                    f"将被清除：{n} 条（dry-run）",
-                ),
+                _count_purge_targets, store,
+                on_done=self._show_purge_preview, on_error=self._purge_failed,
             )
             return
+        self._set_purge_busy(True)
         self._app.run_async(
             purgeops.purge, store, zero=(mode == "zero"), delete=(mode == "delete"), actor="gui",
-            on_done=self._show_purge,
+            on_done=self._show_purge, on_error=self._purge_failed,
         )
 
+    def _set_purge_busy(self, busy: bool) -> None:
+        self._dry_btn.set_enabled(not busy)
+        self._purge_btn.set_enabled(not busy)
+
+    def _show_purge_preview(self, n: int) -> None:
+        self._set_purge_busy(False)
+        self._app.set_status(f"将被清除：{n} 条（dry-run）")
+
+    def _purge_failed(self, exc: Exception) -> None:
+        self._set_purge_busy(False)
+        self._app.set_status(f"清除失败：{exc}", color=theme.ERROR)
+
     def _show_purge(self, result) -> None:
+        self._set_purge_busy(False)
         self._app.set_status(
             f"清除完成：归零 {result.zeroed}，删除 {result.deleted}", color=theme.SUCCESS,
         )

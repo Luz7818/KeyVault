@@ -11,6 +11,7 @@ from tkinter import ttk
 
 from kv.gui import theme
 from kv.gui.controls import RoundButton, SlimScrollbar
+from kv.gui.widgets import track_wraplength
 
 def detail_rows(row, fps: list, history: list) -> list[tuple[str, str, list]]:
     """详情内容组织为 (区块标题, 字段列表, 尾注) 的顺序结构。"""
@@ -63,10 +64,20 @@ def _fill_sections(inner: tk.Widget, row, fps: list, history: list,
             copyable = label in COPYABLE
             lbl = tk.Label(
                 grid, text=str(value), font=theme.FONT_MONO, bg=theme.SURFACE,
-                fg=theme.TEXT, justify="left", wraplength=380,
+                fg=theme.TEXT, justify="left", wraplength=theme.sp(380),
                 cursor="hand2" if copyable else "",
             )
             lbl.grid(row=i, column=1, sticky="w", pady=2)
+            # 值列换行宽度跟弹窗宽度走（列 0 标签实时测量垫底），sha256 等
+            # 长值不再卡死在固定宽度：窄窗口重排、宽窗口利用空间
+            track_wraplength(
+                lbl, 560, anchor=grid,
+                reserve=lambda g=grid: max(
+                    (w.winfo_reqwidth() for w in g.winfo_children()
+                     if w.grid_info() and w.grid_info()["column"] == 0),
+                    default=0,
+                ) + theme.GAP,
+            )
             if copyable:
                 lbl.bind("<Button-1>",
                          lambda _e, w=label, t=str(value): on_copy(w, t))
@@ -94,6 +105,7 @@ def build_detail_window(row, fps: list, history: list) -> None:
     win = tk.Toplevel()
     win.title(f"详情 — {row.name}")
     win.geometry("640x640")
+    win.minsize(520, 420)  # 字段网格换行宽随窗宽流式收缩，但小于此会挤碎
     win.transient()
     win.configure(bg=theme.SURFACE)
     win.bind("<Escape>", lambda _e: win.destroy())

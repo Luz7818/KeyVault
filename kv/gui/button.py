@@ -46,6 +46,7 @@ class RoundButton(tk.Canvas):
         self._base = self._scheme["base"]
         self._cur = self._base
         self._pressed = False
+        self._enabled = True
         self._job: str | None = None
         self._gen = 0
 
@@ -90,20 +91,54 @@ class RoundButton(tk.Canvas):
     def set_command(self, command: Callable[[], None]) -> None:
         self._command = command
 
+    def set_enabled(self, on: bool) -> None:
+        """禁用/恢复：置灰文字、无 hover/按压反馈、点击不提交。
+
+        忙碌期防连点（扫描/导出等长操作）与「条件不满足时的静默置灰」共用。
+        """
+        if on == self._enabled:
+            return
+        self._enabled = on
+        self.configure(cursor="hand2" if on else "arrow")
+        if on:
+            self._set_now(self._base)
+        else:
+            self._gen += 1  # 杀掉在飞的 hover 过渡
+            if self._job is not None:
+                self.after_cancel(self._job)
+                self._job = None
+            self._cur = self._base
+            self._draw()
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
     def _draw(self) -> None:
         self.delete("all")
         w, h = self.winfo_reqwidth(), self.winfo_reqheight()
         points = round_points(1, 1, w - 2, h - 2, theme.RADIUS)
-        self.create_polygon(
-            *points, fill=self._cur, smooth=True,
-            outline=self._scheme["border"], width=1,
-        )
+        fg = self._scheme["fg"]
+        if not self._enabled:
+            fg = theme.TEXT_TERTIARY  # 禁用：文字退灰，底/描边不动
+            if self._scheme["border"] == theme.ACCENT_ACTIVE:
+                border = theme.BORDER_STRONG  # accent 主按钮禁用时不再用主色描边
+            else:
+                border = self._scheme["border"]
+            self.create_polygon(
+                *points, fill=self._cur, smooth=True, outline=border, width=1,
+            )
+        else:
+            self.create_polygon(
+                *points, fill=self._cur, smooth=True,
+                outline=self._scheme["border"], width=1,
+            )
         self.create_text(
-            w / 2, h / 2, text=self._text, fill=self._scheme["fg"], font=self._font,
+            w / 2, h / 2, text=self._text, fill=fg, font=self._font,
         )
 
     def _tint(self, target: str) -> None:
-        if self._pressed:
+        if self._pressed or not self._enabled:
             return
         self._animate_to(target)
 
@@ -129,6 +164,8 @@ class RoundButton(tk.Canvas):
         tick()
 
     def _on_down(self, _event: tk.Event) -> None:
+        if not self._enabled:
+            return
         self._pressed = True
         self._set_now(self._scheme["press"])  # 反馈在按下那一刻，不等释放
 
@@ -138,7 +175,7 @@ class RoundButton(tk.Canvas):
         self._pressed = False
         inside = 0 <= _event.x <= self.winfo_width() and 0 <= _event.y <= self.winfo_height()
         self._set_now(self._scheme["hover"] if inside else self._base)
-        if inside and self._command:
+        if inside and self._enabled and self._command:
             self._command()
 
     def _set_now(self, color: str) -> None:

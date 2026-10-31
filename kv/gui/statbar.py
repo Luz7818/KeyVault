@@ -169,7 +169,8 @@ class DonutCard(Card):
         self._legend.pack(side="left", padx=(_px(6), 0), pady=_px(10), fill="x")
         self._draw_donut(segments)
         self._draw_legend(segments)
-        self.update_idletasks()
+        # 高度直接读 body 请求高——reqheight 在 pack 配置后即时有效，
+        # update_idletasks 会在缩放级联里同步跑整个布局队列（卡顿源）
         self.configure(height=max(self.body.winfo_reqheight() + 2, _px(84)))
 
     def _draw_donut(self, segments: list[tuple[str, int]]) -> None:
@@ -245,7 +246,12 @@ class StatBar(tk.Frame):
         self._cells.append(self._donut)
         self.bind("<Configure>", lambda _e: self._reflow())
         theme.LISTENERS.append(self._reflow)
+        self.bind("<Destroy>", lambda _e: self._detach_listener())
         self._reflow()
+
+    def _detach_listener(self) -> None:
+        if self._reflow in theme.LISTENERS:
+            theme.LISTENERS.remove(self._reflow)
 
     def _reflow(self) -> None:
         width = self.winfo_width()

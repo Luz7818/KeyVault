@@ -40,21 +40,26 @@ class App(tk.Tk):
             min(round(660 * total), round(screen_h * 0.88)),
         )
         self.configure(bg=theme.CANVAS)
+        # 缩放在建页**之前**落位：页面按最终字号一次建对，省掉
+        # 「先按 100% 建一遍、set_zoom 再全应用重排一遍」的启动开销
+        theme.set_zoom(self._ui_scale)
         self._queue: queue.Queue[tuple[Callable, tuple, dict]] = queue.Queue()
         self._pages: dict[str, tk.Widget] = {}
         self._page_slides: dict[str, motion.Spring] = {}
+        self._prev_key: str = ""
         self._current: str = ""
         self._zoom_pending: float | None = None
         self._zoom_job: str | None = None
         self._build_layout()
         self._register_pages()
         self.show_page("secrets")
-        theme.set_zoom(self._ui_scale)  # 持久的用户缩放落到命名字体上
         self.bind_all("<Control-MouseWheel>", self._on_zoom_wheel)
         self.bind_all("<Control-equal>", lambda e: self._zoom_by(0.05))
         self.bind_all("<Control-minus>", lambda e: self._zoom_by(-0.05))
         self.bind_all("<Control-k>", lambda e: self._open_palette())
         self.bind_all("<Control-f>", self._focus_search)
+        self.bind_all("<Key-n>", self._hotkey_add)
+        self.bind_all("<F5>", self._hotkey_refresh)
         self.bind_all("<MouseWheel>", self._on_wheel)
         self.after(50, self._drain_queue)
 
@@ -93,6 +98,40 @@ class App(tk.Tk):
             page.focus_search()
             return "break"
         return ""
+
+    # ------------------------------------------------------------ 快捷键
+
+    _TEXT_CLASSES = ("Entry", "TEntry", "TCombobox", "Text", "Spinbox", "TSpinbox")
+
+    def _typing_in_field(self, w: tk.Widget | None = None) -> bool:
+        """焦点在文本输入控件里时，单字符热键（如 N）必须让位给打字。
+        w 可注入（测试用）；缺省取当前焦点。"""
+        if w is None:
+            w = self.focus_get()
+        return w is not None and (
+            isinstance(w, (tk.Entry, tk.Text)) or w.winfo_class() in self._TEXT_CLASSES
+        )
+
+    def _hotkey_add(self, _event=None) -> str:
+        """N = 新增密钥（密钥页工具提示承诺的键位）。打字中不抢。"""
+        if self._current != "secrets" or self._typing_in_field():
+            return ""
+        page = self._pages.get("secrets")
+        if page is not None and hasattr(page, "hotkey_add"):
+            page.hotkey_add()
+            return "break"
+        return ""
+
+    def _hotkey_refresh(self, _event=None) -> str:
+        """F5 = 重载当前页（有 refresh/on_show 的页面）。"""
+        page = self._pages.get(self._current)
+        if page is None:
+            return ""
+        if hasattr(page, "refresh"):
+            page.refresh()
+        elif hasattr(page, "on_show"):
+            page.on_show()
+        return "break"
 
     def copy_secret_by_name(self, name: str) -> bool:
         """复制一条密钥到剪贴板（命令面板与密钥页共用）。"""
@@ -144,12 +183,19 @@ class App(tk.Tk):
     def _build_layout(self) -> None:
         # 状态栏必须先 pack——后 pack 的 expand 内容区会把它挤出窗口
         self._status = StatusLabel(self)
-        self._sidebar = Sidebar(self, on_navigate=self.show_page)
+        self._sidebar = Sidebar(self, on_navigate=self.show_page,
+                                on_palette=self._open_palette)
         self._sidebar.pack(side="left", fill="y")
         self._content = tk.Frame(self, bg=theme.CANVAS)
         self._content.pack(side="left", fill="both", expand=True)
 
     def _register_pages(self) -> None:
+        """只登记页面类不实例化——页面在首次导航时才构建。
+
+        6 个页面全量预建是几百个 widget 的同步构造，还把每页的自绘控件
+        全部挂进 theme.LISTENERS，启动慢、之后每次缩放级联也跟着变重。
+        未访问的页面不参与布局也不参与缩放级联。
+        """
         from kv.gui.pages.capture import CapturePage
         from kv.gui.pages.detect import DetectPage
         from kv.gui.pages.ingest import IngestPage
@@ -157,7 +203,7 @@ class App(tk.Tk):
         from kv.gui.pages.security import SecurityPage
         from kv.gui.pages.settings import SettingsPage
 
-        registry: dict[str, type] = {
+        self._registry: dict[str, type] = {
             "secrets": SecretsPage,
             "detect": DetectPage,
             "capture": CapturePage,
@@ -165,35 +211,63 @@ class App(tk.Tk):
             "security": SecurityPage,
             "settings": SettingsPage,
         }
-        for key, cls in registry.items():
-            page = cls(self._content, app=self)
+
+    def _page(self, key: str) -> tk.Widget:
+        """取页面，未构建则当场构建并 place 进内容区（place 堆叠 + tkraise）。"""
+        page = self._pages.get(key)
+        if page is None:
+            page = self._registry[key](self._content, app=self)
             page.place(relx=0, rely=0, relwidth=1, relheight=1)
             self._pages[key] = page
+        return page
 
     def show_page(self, key: str) -> None:
-        """切页 = 侧边栏高亮 + 内容区抬页 + 轻滑入。"""
-        if key == self._current:
+        """切页 = 按需构建 + 侧边栏高亮 + 内容区抬页 + 轻滑入。"""
+        if key not in self._registry or key == self._current:
             return
         self._current = key
         self._sidebar.set_current(key)
-        for k, page in self._pages.items():
-            if k == key:
-                page.tkraise()
-                if hasattr(page, "on_show"):
-                    page.on_show()
-                self._slide_in(page, k)
+        page = self._page(key)
+        page.tkraise()
+        if hasattr(page, "on_show"):
+            page.on_show()
+        self._slide_in(page, key)
 
     def _slide_in(self, page: tk.Widget, key: str) -> None:
-        """新页面从右侧 18px 轻滑入（临界阻尼弹簧）。首次切换无动画。"""
+        """页面过渡：新页从右侧 sp(18) 滑入，旧页同时向左微退 sp(8)——
+        新页左缘露出的条带是旧页在退场（视差交叉滑动）。
+
+        tkinter 控件树不支持逐像素透明度（alpha 只对整个 Toplevel 生效），
+        「内容淡入」以此替代：观感上是两页互相推移而不是硬切。
+        首次显示无动画；弹簧可中断重定向，快速连点不跳变。
+        """
+        dist = theme.sp(18)
+        back = theme.sp(8)
+        prev_key = self._prev_key
+        if prev_key and prev_key != key:
+            prev_page = self._pages.get(prev_key)
+            if prev_page is not None:
+                self._slide_page(prev_page, prev_key, -back, first=False)
+        self._slide_page(page, key, dist, first=True)
+        self._prev_key = key
+
+    def _slide_page(self, page: tk.Widget, key: str, target: float, *,
+                    first: bool) -> None:
         spring = self._page_slides.get(key)
         if spring is None:
-            spring = motion.Spring(self, lambda x: page.place_configure(x=round(x)))
+            spring = motion.Spring(
+                self, lambda x, p=page: p.place_configure(x=round(x)),
+            )
             self._page_slides[key] = spring
-            spring.jump(0)
-            return
-        page.place_configure(x=18)
-        spring.jump(18)
-        spring.to(0)
+            if first:
+                spring.jump(0)  # 首显落位即可，没有上一页可视差
+                return
+        if first:
+            page.place_configure(x=round(target))
+            spring.jump(target)
+            spring.to(0)
+        else:
+            spring.to(target)  # 退场微退；被再次显示时 jump 重定向回场
 
     def set_status(self, text: str, *, color: str = "") -> None:
         self._status.set(text, color=color)

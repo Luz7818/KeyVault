@@ -77,7 +77,8 @@ ROW_HEIGHT = 44
 CONTROL_HEIGHT = 42
 RADIUS = 11
 BTN_PAD_X = 16   # 按钮文字到左右边的内边距
-BTN_PAD_Y = 12   # 按钮文字到上下边的内边距
+BTN_PAD_Y = 9    # 按钮文字到上下边的内边距：body 行高 + 2×9 ≈ CONTROL_HEIGHT，
+                 # 按钮与输入框/标签条同高（12 时按钮 47px、输入框 42px，工具栏错位）
 
 # 像素字号基线（scale=1 时），init() 按显示器放大
 _BODY_PX = 17
@@ -126,14 +127,21 @@ ZOOM = 1.0
 
 def set_zoom(zoom: float) -> float:
     """运行中缩放（Ctrl+滚轮 / Ctrl+= / Ctrl+-）：字体即时变，控件高度/圆角
-    与表格行高同步更新。返回收敛后的 zoom。"""
+    与表格行高同步更新。返回收敛后的 zoom。
+
+    值没变（重复 Ctrl+= 到顶、启动时重放持久值）直接返回——级联的字体
+    重排 + 全部 LISTENERS 重绘单次就要几百毫秒，无变化的落位不该再付一次。
+    """
     global ZOOM, ROW_HEIGHT, CONTROL_HEIGHT, RADIUS, BTN_PAD_X, BTN_PAD_Y
-    ZOOM = max(0.85, min(round(zoom, 2), 1.6))
+    zoom = max(0.85, min(round(zoom, 2), 1.6))
+    if zoom == ZOOM:
+        return ZOOM
+    ZOOM = zoom
     ROW_HEIGHT = _f(44)
     CONTROL_HEIGHT = _f(42)
     RADIUS = _f(11)
     BTN_PAD_X = _f(16)
-    BTN_PAD_Y = _f(12)
+    BTN_PAD_Y = _f(9)
     if _FONTS:
         _FONTS["body"].configure(size=-_f(_BODY_PX))
         _FONTS["bold"].configure(size=-_f(_BODY_PX))
@@ -142,7 +150,10 @@ def set_zoom(zoom: float) -> float:
         _FONTS["mono"].configure(size=-_f(_MONO_PX))
         ttk.Style().configure("Treeview", rowheight=ROW_HEIGHT)
     for notify in LISTENERS:
-        notify()
+        try:
+            notify()
+        except tk.TclError:
+            pass  # 级联中个别控件恰好销毁——跳过它，其余照常落位
     return ZOOM
 
 

@@ -91,7 +91,7 @@ stdlib 零依赖）；外科手术式改动（不动无关代码，每行改动�
 
 | 项 | 值 | 复核命令 |
 |---|---|---|
-| 测试 | `Ran 587, OK (skipped=3)`，0 失败（2026-10-15 实测；3 项 skip = 2 项原有 + 屏幕遮挡层的环境条件 skip） | `python -I -m unittest discover -s tests -t .` |
+| 测试 | `Ran 603, OK (skipped=2~3)`，0 失败（2026-11-01 实测；skip 数含屏幕遮挡层的环境条件项，随桌面状态 2~3 浮动） | `python -I -m unittest discover -s tests -t .` |
 | 金标自测 | `selftest --golden` 全过（92 条） | `python kv.py selftest --golden` |
 | 静态检查 | 无 lint 配置（有意） | — |
 | CI | 无 | — |
@@ -117,6 +117,16 @@ stdlib 零依赖）；外科手术式改动（不动无关代码，每行改动�
   的参数形态必须同时改 `kv_gui.py` 的分发判定，两处是一对。
 - GUI 的 TabBar 是 place 堆叠 + tkraise：`add()` 之后必须重新 tkraise 当前页，
   否则后注册的标签会盖住初始页（三页首显错位的历史 bug）。
+- GUI 测试里无 master 的 `tk.StringVar()`/`tkfont.Font()` 落在 `tk._default_root`
+  ——测试类若不销毁 root，旧 root 会一直占住默认值，后续用例跨解释器失联
+  （var 读不到值）。`_GuiTestCase` 的 tearDown 销毁是底线，别删。
+- 自绘滚动条一律 place 悬浮在内容右缘（ScrollPage/DataTable 都是）——改回
+  pack/grid 会让溢出切换时内容宽度跳 8px。
+- 侧边栏行的点击/hover 是 Canvas 级 hit-test（`_hit_row` + `canvasy`），不是
+  tag_bind——tag 只挂在文字 item 上时图标与行空白区点不动（用户实测踩过）。
+  同理新画布控件要「整块可点」就绑控件级事件做 hit-test，别指望 item tag。
+- GUI 页面是懒构建（首次导航才实例化，见 app._page）：依赖「某页已存在」的
+  逻辑必须经 show_page 走，别直接摸 `_pages`。
 - 不要在 `repo.py` 以外写 DML（审计链会断）；不要删 `tests/corpus/` 金标语料；
   不要改 `schema.sql` 而不递增 `SCHEMA_VERSION`；不要引入外部依赖（stdlib only）。
 - vault 数据（`.kv/`）永不入库——见 [docs/GIT.md](docs/GIT.md)。
