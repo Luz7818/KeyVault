@@ -731,3 +731,28 @@ sp(18) 滑入的同时旧页向左微退 sp(8)，新页左缘露出的条带是�
   （深色标题栏生效、空态按钮修复、淡入收尾 alpha=1、面板保持瞬时）。
 - 门禁：`Ran 607, OK (skipped=2~3)`；test_arch 行数预算拦过一次（widgets.py 461 超
   460，注释收敛后回到预算内）。
+
+## 2026-11-01 · TOTP 支持 + 剪贴板倒计时（周报功能候选 #8）
+
+- **TOTP（RFC 6238，纯 stdlib）**：`kv/ops/totp.py`——hmac/sha1/base64/struct 实现，
+  SHA1/6 位/30 秒兼容基线，`generate` 留 digits 给 RFC 附录 B 官方向量（8 位口径
+  6 个向量全过）。设计定位：TOTP 是对值的**解释**而不是存储类别——schema 的 kind
+  是封闭 CHECK 枚举，为它开新 kind 需要表重建迁移，代价配不上；种子能按 base32
+  解析（宽容大小写/空格/连字符/补 padding）就出码，否则明确报错。
+  - CLI：`kv totp <name>`（store.py，验证码 30 秒失效不算明文，直接上终端）。
+  - GUI：密钥页右键菜单「TOTP 验证码」→ 活码窗（`kv/gui/totp_window.py`）——
+    大号等宽验证码 + 倒计时环（Canvas arc 画剩余比例，剩 5s 转琥珀是状态指示
+    不是装饰）+ 复制按钮（走剪贴板排除历史通道）。种子经 reveal 窗口取一次
+    （即开即归零、顺手留审计），窗口销毁即停表。
+- **剪贴板倒计时（GUI）**：复制后状态栏从静态的「30 秒后自动擦除」变成逐秒
+  倒数，到点报告时点；重复制重置。实际擦除仍由分离 helper 按指纹执行——
+  倒计时只是把既有的兑现过程变成看得见的（helper 换内容即跳过的语义不变）。
+- 中途纠偏（诚实记录）：最初把 totp 加进 masking.KINDS 走 kind 路线，
+  `schema.sql` 的 CHECK 约束当场拦下（IntegrityError）——kind 入库会砸掉
+  既有 vault 的兼容性，回退为「值的解释」设计；fallback_verdict 的 --kind
+  透传实验也一并回退，兜底判定维持原状。
+- 测试 +12（RFC 向量、种子解析、CLI 端到端/错误路径、活码面板固定时钟、
+  倒计时逐秒/重置）；test_arch 预算拦截三次（secrets.py 477/462、cli 函数 64
+  ——TOTP 入口逻辑移入 totp_window、totp parser 独立成组后全部回预算内）。
+  TOTP 活码窗截图目检（倒计时环/大码/复制按钮排版正确）。
+- 门禁：`Ran 619, OK (skipped=2~3)`；金标 92 PASS 不受影响。

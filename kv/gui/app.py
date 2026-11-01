@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk
 from typing import Any, Callable
@@ -50,6 +51,7 @@ class App(tk.Tk):
         self._current: str = ""
         self._zoom_pending: float | None = None
         self._zoom_job: str | None = None
+        self._wipe_job: str | None = None
         self._build_layout()
         self._register_pages()
         self.show_page("secrets")
@@ -149,7 +151,33 @@ class App(tk.Tk):
         self.set_status(
             f"已复制 {result.name}，{result.ttl:.0f} 秒后自动擦除", color=theme.SUCCESS,
         )
+        if result.ttl > 0:
+            self._start_wipe_countdown(result.name, result.ttl)
         return True
+
+    def _start_wipe_countdown(self, name: str, ttl: float) -> None:
+        """复制后的秒级倒计时：状态栏逐秒显示剩余时间。
+
+        实际擦除由分离 helper 按指纹执行（剪贴板换了内容就跳过，绝不覆盖
+        新东西）——这里只把「30 秒后自动擦除」从一句静态承诺变成看得见的
+        兑现过程。再次复制会重置倒计时。
+        """
+        if self._wipe_job is not None:
+            self.after_cancel(self._wipe_job)
+        deadline = time.monotonic() + ttl
+
+        def tick() -> None:
+            remaining = round(deadline - time.monotonic())
+            if remaining > 0:
+                self.set_status(
+                    f"已复制 {name}，{remaining}s 后自动擦除", color=theme.SUCCESS,
+                )
+                self._wipe_job = self.after(1000, tick)
+            else:
+                self._wipe_job = None
+                self.set_status("剪贴板倒计时结束，已到自动擦除时点")
+
+        self._wipe_job = self.after(1000, tick)
 
     def _on_zoom_wheel(self, event: tk.Event) -> None:
         self._zoom_by(0.05 if event.delta > 0 else -0.05)

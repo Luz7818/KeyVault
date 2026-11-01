@@ -157,6 +157,7 @@ class SecretsPage(ScrollPage):
         self._menu = tk.Menu(self, tearoff=0)
         for label, cmd in (
             ("查看详情", lambda: self._on_show(self._sel_name())),
+            ("TOTP 验证码", lambda: self._on_totp(self._sel_name())),
             ("显示明文", lambda: self._on_reveal(self._sel_name())),
             ("复制到剪贴板", lambda: self._on_copy(self._sel_name())),
             ("轮换", lambda: self._on_rotate(self._sel_name())),
@@ -316,6 +317,14 @@ class SecretsPage(ScrollPage):
         fps = store.fingerprints_of(row.id)
         history = store.list_audit(secret_id=row.id, limit=15)
         build_detail_window(row, fps, history)
+
+    def _on_totp(self, name: str) -> None:
+        """TOTP 活码窗。显式菜单动作而不是详情窗自动挂——TOTP 是对值的
+        解释而非存储类别，非种子记录不该为「看看详情」付一次 reveal。"""
+        if name and self._app.store is not None:
+            from kv.gui.totp_window import open_totp_for_secret
+
+            open_totp_for_secret(self, self._app.store, name)
 
     def _on_reveal(self, name: str) -> None:
         if not name:

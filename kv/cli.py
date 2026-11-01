@@ -122,6 +122,14 @@ def _store_parsers(sub, common) -> None:
     p.set_defaults(func=storecmd.cmd_config)
 
 
+def _totp_parser(sub, common) -> None:
+    """TOTP 活码：值按 base32 种子出两步验证码（RFC 6238）。"""
+    p = sub.add_parser("totp", parents=[common],
+                       help="生成记录的两步验证码（值需是 base32 种子，RFC 6238）")
+    p.add_argument("name")
+    p.set_defaults(func=storecmd.cmd_totp)
+
+
 def _backup_parsers(sub, common) -> None:
     """vault 生命周期：口令加密的 .kvb 全量导出与恢复。
 
@@ -305,6 +313,7 @@ def build_parser() -> argparse.ArgumentParser:
     common = _common()
 
     _store_parsers(sub, common)
+    _totp_parser(sub, common)
     _detect_parsers(sub, common)
     _capture_parsers(sub, common)
     _maintenance_parsers(sub, common)

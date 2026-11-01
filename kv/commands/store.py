@@ -247,6 +247,28 @@ def cmd_reveal(args) -> int:
     return 0
 
 
+def cmd_totp(args) -> int:
+    """生成记录的 TOTP 验证码（RFC 6238）。
+
+    TOTP 是对值的**解释**而不是一种存储类别（schema 的 kind 是封闭枚举）：
+    值能按 base32 种子解析就出码，否则明确报错。验证码 30 秒后即失效，
+    不算明文，可以直接上终端。
+    """
+    from kv.ops import totp as totpops
+
+    store = open_store(args)
+    try:
+        with store.reveal(args.name) as buffer:
+            seed = totpops.parse_seed(buffer.decode("utf-8", "replace"))
+            code, remaining = totpops.generate(seed, clock.now())
+    except totpops.SeedError:
+        console.error(f"「{args.name}」的值不是合法的 base32 种子，不能生成验证码")
+        console.hint("种子是验证器「显示密钥」里那串 base32；确认记录的值就是它")
+        return errors.EXIT_USAGE
+    console.ok(f"{code[:3]} {code[3:]}   （{remaining}s 后刷新）")
+    return 0
+
+
 def cmd_rm(args) -> int:
     store = open_store(args)
     row = store.get(args.name)
