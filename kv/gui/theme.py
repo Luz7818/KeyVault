@@ -125,6 +125,14 @@ LISTENERS: list[Callable[[], None]] = []  # 自绘组件注册的重绘回调
 ZOOM = 1.0
 
 
+def detach(listener) -> None:
+    """从 LISTENERS 摘除重绘回调（不在则忽略）——各控件 destroy 的收尾样板。"""
+    try:
+        LISTENERS.remove(listener)
+    except ValueError:
+        pass
+
+
 def set_zoom(zoom: float) -> float:
     """运行中缩放（Ctrl+滚轮 / Ctrl+= / Ctrl+-）：字体即时变，控件高度/圆角
     与表格行高同步更新。返回收敛后的 zoom。

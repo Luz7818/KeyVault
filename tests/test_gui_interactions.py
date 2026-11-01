@@ -240,7 +240,11 @@ class TestFormDialogKeys(_GuiTestCase):
 
 
 class TestSelectionPulse(_GuiTestCase):
-    """选中涟漪：点击行的 sel-pulse tag 从按下色退回选中色后退场。"""
+    """选中涟漪：点击行的 sel-pulse tag 从按下色退回选中色后退场。
+
+    帧时钟注入 1ms + 完成态轮询（tag 退场即过）——固定 sleep 预算对动画
+    是结构性 flaky：套件高载时 Tcl timer 派发延迟会吃掉 wall-clock 余量。
+    """
 
     def test_pulse_tag_lifecycle(self):
         import time
@@ -248,6 +252,7 @@ class TestSelectionPulse(_GuiTestCase):
         from kv.gui.widgets import DataTable
 
         table = DataTable(self.root, ("name", "status"), headings=("名称", "状态"))
+        table.PULSE_FRAME_MS = 1  # 注入：收敛只由动画完成态决定
         table.pack()
         table.insert_row(("a", "active"))
         self.root.update()
@@ -255,8 +260,9 @@ class TestSelectionPulse(_GuiTestCase):
         table.tree.selection_set(item)  # Treeview 按下即选中并触发 <<TreeviewSelect>>
         self.root.update()
         self.assertIn("sel-pulse", table.tree.item(item, "tags"))
-        for _ in range(8):  # 4 帧 × 16ms：轮转 update 等弹簧播完
-            time.sleep(0.03)
+        deadline = time.monotonic() + 2.0  # 超时只是兜底，正常 4 帧 ≈ 毫秒级
+        while "sel-pulse" in table.tree.item(item, "tags") and time.monotonic() < deadline:
+            time.sleep(0.01)
             self.root.update()
         self.assertNotIn("sel-pulse", table.tree.item(item, "tags"))
 

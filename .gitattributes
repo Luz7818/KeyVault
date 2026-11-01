@@ -1,0 +1,7 @@
+# 行尾单源：仓库内一律 LF（索引本就全 LF），检出也保持 LF，消除
+# autocrlf 环境下的 LF↔CRLF 提交警告。批处理例外——cmd 对 LF 脚本的
+# 标签/块解析有历史坑，.bat 强制 CRLF。位图不参与任何转换。
+* text=auto eol=lf
+*.bat text eol=crlf
+*.png -text
+*.ico -text

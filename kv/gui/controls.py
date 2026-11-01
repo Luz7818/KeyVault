@@ -114,8 +114,7 @@ class RoundEntry(tk.Canvas):
         self._draw()
 
     def destroy(self) -> None:
-        if self._on_font_changed in theme.LISTENERS:
-            theme.LISTENERS.remove(self._on_font_changed)
+        theme.detach(self._on_font_changed)
         super().destroy()
 
     def _set_focus(self, on: bool) -> None:
@@ -188,9 +187,9 @@ class TabBar(ttk.Frame):
         theme.LISTENERS.append(self._relayout)
 
     def destroy(self) -> None:
-        if self._relayout in theme.LISTENERS:
-            theme.LISTENERS.remove(self._relayout)
+        theme.detach(self._relayout)
         super().destroy()
+
     def add(self, key: str, label: str) -> tk.Frame:
         """注册一个标签，返回它的内容层（已带内边距，直接 pack 内容）。
 

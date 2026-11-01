@@ -64,9 +64,7 @@ class Sidebar(tk.Canvas):
 
     def _detach_listeners(self) -> None:
         """销毁时摘掉全局缩放监听——否则级联会打在已销毁控件上。"""
-        for cb in (self._schedule_paint,):
-            if cb in theme.LISTENERS:
-                theme.LISTENERS.remove(cb)
+        theme.detach(self._schedule_paint)
 
     # ------------------------------------------------------------ 对外
 

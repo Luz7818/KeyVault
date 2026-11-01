@@ -216,6 +216,10 @@ class DataTable(ttk.Frame):
     # ------------------------------------------------------------ 选中涟漪
 
     SEL_PULSE_FROM = "#c9d7ff"  # 比选中底色深一档的按下反馈色
+    # 帧时钟做成类常量：测试注入 1ms 就能按「动画完成态」收敛，不靠
+    # wall-clock 余量（固定 sleep 预算是结构性 flaky——套件高载时 Tcl
+    # timer 派发延迟会吃掉余量）
+    PULSE_FRAME_MS = 16
 
     def _pulse_selection(self) -> None:
         """选中行的涟漪：sel-pulse tag 底色 4 帧从按下色退回选中色。
@@ -251,7 +255,7 @@ class DataTable(ttk.Frame):
             self._pulse_job = None
             return  # 控件已销毁
         self._pulse_step += 1
-        self._pulse_job = self.after(16, self._advance_pulse)
+        self._pulse_job = self.after(self.PULSE_FRAME_MS, self._advance_pulse)
 
     def _sort_by(self, col: str) -> None:
         self._sort_rev = not self._sort_rev if self._sort_col == col else False

@@ -80,8 +80,7 @@ class RoundButton(tk.Canvas):
         self._draw()
 
     def destroy(self) -> None:
-        if self._on_font_changed in theme.LISTENERS:
-            theme.LISTENERS.remove(self._on_font_changed)
+        theme.detach(self._on_font_changed)
         super().destroy()
 
     def set_text(self, text: str) -> None:

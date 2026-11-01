@@ -83,8 +83,7 @@ class StatCard(Card):
         self.bind("<Destroy>", lambda _e: self._detach_listener())
 
     def _detach_listener(self) -> None:
-        if self._rebuild in theme.LISTENERS:
-            theme.LISTENERS.remove(self._rebuild)
+        theme.detach(self._rebuild)
 
     def set_value(self, value: int) -> None:
         self._value_var.set(str(value))
@@ -146,8 +145,7 @@ class DonutCard(Card):
         self.bind("<Destroy>", lambda _e: self._detach_listener())
 
     def _detach_listener(self) -> None:
-        if self._rebuild in theme.LISTENERS:
-            theme.LISTENERS.remove(self._rebuild)
+        theme.detach(self._rebuild)
 
     def set_segments(self, segments: list[tuple[str, int]]) -> None:
         self._segments = segments
@@ -250,8 +248,7 @@ class StatBar(tk.Frame):
         self._reflow()
 
     def _detach_listener(self) -> None:
-        if self._reflow in theme.LISTENERS:
-            theme.LISTENERS.remove(self._reflow)
+        theme.detach(self._reflow)
 
     def _reflow(self) -> None:
         width = self.winfo_width()

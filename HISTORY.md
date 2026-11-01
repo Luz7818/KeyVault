@@ -686,3 +686,17 @@ sp(18) 滑入的同时旧页向左微退 sp(8)，新页左缘露出的条带是�
 
 - 门禁 603 OK（601 + 涟漪生命周期/视差目标 2 条）；金标 92 全 PASS；
   GUI 契约 31 条全过；dist 重建五查全过。
+
+## 2026-11-01 · KV-04 收尾 + 仓库卫生三件（周报 2026-11-01 待办清账）
+
+- **KV-04（P1，上轮挂账③清账）**：选中涟漪的帧时钟提为 `DataTable.PULSE_FRAME_MS`
+  类常量，测试注入 1ms 并改**完成态轮询**（sel-pulse tag 退场即过，2s 超时只作兜底）
+  ——固定 sleep 预算（8×30ms 对动画 4×16ms）是结构性 flaky：套件高载时 Tcl timer
+  派发延迟可吃掉余量。注入后收敛由动画完成态决定，与 wall-clock 余量解耦。
+- **KV-08（P3）**：补 `.gitattributes`（`* text=auto eol=lf` + `*.bat eol=crlf` +
+  位图 `-text`）——索引本就全 LF，工作树零 churn，提交侧 LF→CRLF 警告随之消失。
+- **KV-09（P3）**：`kv/commands/m4.py` → `maintenance.py`（内容是 scan/audit/expire/purge，
+  与「M4」里程碑已无关）；cli.py 的 `_m4_parsers` → `_maintenance_parsers`。
+- **KV-10（P3，轻量收口）**：`theme.detach()` 单点收口 LISTENERS 摘除样板
+  （7 处 if-in-remove）；完整 mixin 不做——跨 6 个控件类换方法名，收益配不上回归面。
+- 门禁：全量两遍 `Ran 603, OK (skipped=2~3)`；`selftest --golden` 92 PASS 不受影响。

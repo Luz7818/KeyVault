@@ -18,7 +18,7 @@ from kv.commands import backup as backupcmd
 from kv.commands import capture as capturecmd
 from kv.commands import detect as detectcmd
 from kv.commands import ingest as ingestcmd
-from kv.commands import m4 as m4cmd
+from kv.commands import maintenance as maintcmd
 from kv.commands import store as storecmd
 from kv.commands.common import db_path
 from kv.core import db, masking, repo
@@ -267,13 +267,13 @@ def _ingest_parsers(sub, common) -> None:
     p.set_defaults(func=ingestcmd.cmd_revoke)
 
 
-def _m4_parsers(sub, common) -> None:
-    """M4 的命令面：审计、扫描、过期、清除。"""
+def _maintenance_parsers(sub, common) -> None:
+    """巡检与维护的命令面：扫描、审计、过期、清除。"""
     p = sub.add_parser("scan", parents=[common],
                        help="扫描目录树，查找泄露的密钥")
     p.add_argument("directory", nargs="?", default=".",
                    help="要扫描的目录（默认当前目录）")
-    p.set_defaults(func=m4cmd.cmd_scan)
+    p.set_defaults(func=maintcmd.cmd_scan)
 
     p = sub.add_parser("audit", parents=[common],
                        help="审计链校验或事件列表")
@@ -282,11 +282,11 @@ def _m4_parsers(sub, common) -> None:
     p.add_argument("--event", default="", help="按事件类型过滤")
     p.add_argument("--secret-id", type=int, default=None, help="按记录 id 过滤")
     p.add_argument("--limit", type=int, default=50)
-    p.set_defaults(func=m4cmd.cmd_audit)
+    p.set_defaults(func=maintcmd.cmd_audit)
 
     p = sub.add_parser("expire", parents=[common],
                        help="标记已过期记录（expires_at 已过的翻成 expired）")
-    p.set_defaults(func=m4cmd.cmd_expire)
+    p.set_defaults(func=maintcmd.cmd_expire)
 
     p = sub.add_parser("purge", parents=[common],
                        help="清除已吊销 / 已过期记录的数据")
@@ -294,7 +294,7 @@ def _m4_parsers(sub, common) -> None:
                    help="完全删除记录（默认只清零 value_blob）")
     p.add_argument("--dry-run", action="store_true",
                    help="只报告将清除多少条，不实际执行")
-    p.set_defaults(func=m4cmd.cmd_purge)
+    p.set_defaults(func=maintcmd.cmd_purge)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -307,7 +307,7 @@ def build_parser() -> argparse.ArgumentParser:
     _store_parsers(sub, common)
     _detect_parsers(sub, common)
     _capture_parsers(sub, common)
-    _m4_parsers(sub, common)
+    _maintenance_parsers(sub, common)
     return parser
 
 

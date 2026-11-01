@@ -1,4 +1,4 @@
-"""M4 命令：scan、audit、expire、purge。"""
+"""巡检与维护命令：scan、audit、expire、purge。"""
 
 from __future__ import annotations
 
