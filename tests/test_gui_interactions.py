@@ -336,5 +336,101 @@ class TestKeyboardWiring(_GuiTestCase):
         )
 
 
+class TestModalFadeIn(_GuiTestCase):
+    """窗口淡入原语：alpha 从 0 缓出到 1，注入 1ms 帧按完成态轮询。
+
+    模态框/详情窗/气泡是「偶尔出现」的表面才淡入；命令面板（键盘 100+/天）
+    永不接这个函数——频率闸门是硬规则。
+    """
+
+    def test_fade_reaches_full_alpha(self):
+        import time
+
+        from kv.gui import motion
+
+        self.root.deiconify()
+        win = tk.Toplevel(self.root)
+
+        def _cleanup():
+            try:
+                win.destroy()
+            except tk.TclError:
+                pass  # root 销毁时窗口已连带销毁
+
+        self.addCleanup(_cleanup)
+        motion.fade_in_window(win, ms=2, steps=2)  # 注入：总时长 2ms、2 帧收完
+        self.assertEqual(win.attributes("-alpha"), 0.0)
+        deadline = time.monotonic() + 2.0
+        while win.attributes("-alpha") < 1.0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+            self.root.update()
+        self.assertEqual(win.attributes("-alpha"), 1.0)
+
+
+class TestTabBarHoverFade(_GuiTestCase):
+    """标签 hover 文字色渐变：3 帧到目标色；中途反向就重定向。"""
+
+    def test_hover_fades_and_redirects(self):
+        import time
+
+        from kv.gui import theme
+        from kv.gui.controls import TabBar
+
+        bar = TabBar(self.root)
+        bar.add("a", "甲")
+        bar.add("b", "乙")
+        bar.on_show_first()
+        bar._hover("b", True)
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            self.root.update()
+            if bar._strip.itemcget("label-b", "fill") == theme.TEXT:
+                break
+            time.sleep(0.01)
+        self.assertEqual(bar._strip.itemcget("label-b", "fill"), theme.TEXT)
+        bar._hover("b", False)  # 中途移出：从当前色续变回次要色
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            self.root.update()
+            if bar._strip.itemcget("label-b", "fill") == theme.TEXT_SECONDARY:
+                break
+            time.sleep(0.01)
+        self.assertEqual(bar._strip.itemcget("label-b", "fill"), theme.TEXT_SECONDARY)
+
+    def test_hover_skips_selected_tab(self):
+        from kv.gui import theme
+        from kv.gui.controls import TabBar
+
+        bar = TabBar(self.root)
+        bar.add("a", "甲")
+        bar.add("b", "乙")
+        bar.on_show_first()
+        bar.select("b")
+        bar._hover("b", True)  # 选中项不给 hover 过渡（_repaint 独占其颜色）
+        self.root.update()
+        self.assertEqual(bar._strip.itemcget("label-b", "fill"), theme.ACCENT)
+
+
+class TestEmptyArtEntrance(_GuiTestCase):
+    """空态插图入场：scale 从 0.85 缓出到 1（rare/first-time 层级的惊喜预算）。"""
+
+    def test_art_scale_settles_at_full(self):
+        import time
+
+        from kv.gui.pages.secrets_states import StateCards
+
+        cards = StateCards(
+            self.root, on_add=lambda: None, on_init=lambda: None,
+            go_capture=lambda: None, go_settings=lambda: None,
+            clear_filters=lambda: None,
+        )
+        cards.show_empty("empty")
+        deadline = time.monotonic() + 2.0
+        while cards._art_scale < 1.0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+            self.root.update()
+        self.assertEqual(cards._art_scale, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

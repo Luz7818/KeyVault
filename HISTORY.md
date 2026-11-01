@@ -700,3 +700,34 @@ sp(18) 滑入的同时旧页向左微退 sp(8)，新页左缘露出的条带是�
 - **KV-10（P3，轻量收口）**：`theme.detach()` 单点收口 LISTENERS 摘除样板
   （7 处 if-in-remove）；完整 mixin 不做——跨 6 个控件类换方法名，收益配不上回归面。
 - 门禁：全量两遍 `Ran 603, OK (skipped=2~3)`；`selftest --golden` 92 PASS 不受影响。
+
+## 2026-11-01 · UI/动画强化批（周报目标：强化 UI 与动画设计，动效口径按 Emil 规则）
+
+先按频率闸门给全部既有动效过筛（结论记录在案，防止将来加错）：命令面板开关
+**永不动画**（键盘 100+/天，现状正确）；表格行 hover 与 RoundEntry 聚焦维持瞬时
+（高频档，"要么没有要么不可察觉"）；侧边栏指示条/标签 pill 弹簧、页面视差、按钮
+8 帧 hover、涟漪 4 帧全部在预算内，保持不动。本轮只补四处缺口 + 一处视觉断裂：
+
+- **动效令牌单源（motion.py）**：`FRAME_MS=16` 帧时钟、`ease_out` 二次缓出、
+  `fade_in_window`（Toplevel -alpha，ms/steps 可注入供测试按完成态轮询）——
+  模态框/详情窗/明文窗/悬浮气泡是 tkinter 里仅有的可淡入表面。
+- **四处生硬弹出 → 淡入**：模态 FormDialog 与详情窗/明文窗 150ms（模态档 200-500ms
+  的干脆下限）、tooltip 64ms（数十次/天档只许 near-imperceptible）。
+- **TabBar hover 言副其实**：文档一直写「hover 渐变」实现却是瞬时换色——补 3 帧
+  渐变（代际令牌防叠加，选中项/重排即停手），与按钮/侧边栏同语言。
+- **空态惊喜预算**：空态插图 0.85→1 缓出 6 帧入场（rare/first-time 层级才允许）；
+  已在屏上（空库反复刷新）不重播。
+- **按钮按压触感**：按下整块内缩 1px（tkinter 无 transform，内缩是 scale(0.97)
+  的替代），反馈仍在 pointer-down 那一刻；忙碌置灰打断按住态时一并还原。
+- **深色标题栏（kv_gui.py shim）**：DWM DWMWA_USE_IMMERSIVE_DARK_MODE（20/19 双取值
+  best-effort）——深墨蓝侧边栏配系统白标题栏是界面最刺眼的断裂。10-06 曾把这段
+  写进 kv/gui/ 被 test_arch 的 ctypes 隔离门禁正确拦下；本次放在规则允许的入口
+  shim（与 DPI 感知同位置），`launch(on_window=…)` 回调挂入。
+- **顺带修复（截图目检发现）**：`RoundButton.set_text` 只重绘不重测——空态卡三个
+  按钮以空文案建出 42px 宽，文案互相叠压被裁（实测截图「化 V/看设置/解捕」）；
+  补 `_measure_size()` 后按文案定宽。
+- 测试 +4：fade_in_window 完成态轮询、TabBar hover 渐变/重定向/选中项豁免、
+  空态插图入场收敛。六页 + 对话框 + 详情 + 面板 PrintWindow 截图逐张目检
+  （深色标题栏生效、空态按钮修复、淡入收尾 alpha=1、面板保持瞬时）。
+- 门禁：`Ran 607, OK (skipped=2~3)`；test_arch 行数预算拦过一次（widgets.py 461 超
+  460，注释收敛后回到预算内）。

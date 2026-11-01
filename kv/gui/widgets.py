@@ -335,6 +335,8 @@ class FormDialog(tk.Toplevel):
             entry.bind("<Return>", lambda _e: self._on_ok())
         self.wait_visibility()
         self._center(parent)
+        # 模态框偶尔出现才动画：150ms ease-out 淡入（模态预算 200-500ms 更干脆的下限）
+        motion.fade_in_window(self)
         # 焦点落首字段并全选：编辑场景直接输入即覆盖旧值
         if self._entries:
             self._entries[0].focus_set()

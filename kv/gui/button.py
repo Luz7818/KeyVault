@@ -85,6 +85,7 @@ class RoundButton(tk.Canvas):
 
     def set_text(self, text: str) -> None:
         self._text = text
+        self._measure_size()  # 换文案必须重测：空文案建的按钮只有 42px 宽
         self._draw()
 
     def set_command(self, command: Callable[[], None]) -> None:
@@ -102,6 +103,7 @@ class RoundButton(tk.Canvas):
         if on:
             self._set_now(self._base)
         else:
+            self._pressed = False  # 忙碌置灰若打断按住态，内缩要一并还原
             self._gen += 1  # 杀掉在飞的 hover 过渡
             if self._job is not None:
                 self.after_cancel(self._job)
@@ -116,7 +118,10 @@ class RoundButton(tk.Canvas):
     def _draw(self) -> None:
         self.delete("all")
         w, h = self.winfo_reqwidth(), self.winfo_reqheight()
-        points = round_points(1, 1, w - 2, h - 2, theme.RADIUS)
+        # 按下时整块内缩 1px——tkinter 没有 transform，内缩是 scale(0.97)
+        # 的触觉替代；反馈仍发生在按下那一刻（_on_down 即重绘）
+        inset = 2 if self._pressed else 1
+        points = round_points(inset, inset, w - 1 - inset, h - 1 - inset, theme.RADIUS)
         fg = self._scheme["fg"]
         if not self._enabled:
             fg = theme.TEXT_TERTIARY  # 禁用：文字退灰，底/描边不动

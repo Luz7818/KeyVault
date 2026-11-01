@@ -9,7 +9,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from kv.gui import theme
+from kv.gui import motion, theme
 from kv.gui.controls import RoundButton, SlimScrollbar
 from kv.gui.widgets import track_wraplength
 
@@ -143,3 +143,4 @@ def build_detail_window(row, fps: list, history: list) -> None:
 
     inner.bind("<Configure>", _sync)
     SlimScrollbar(win, body).pack(side="right", fill="y", before=body)
+    motion.fade_in_window(win)  # 详情窗同模态语言：150ms ease-out 淡入

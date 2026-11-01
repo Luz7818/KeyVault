@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Any
 
-from kv.gui import icons, theme
+from kv.gui import icons, motion, theme
 from kv.gui.controls import Card, RoundButton, RoundEntry
 from kv.gui.detail_window import build_detail_window
 from kv.gui.pages.secrets_states import StateCards
@@ -342,6 +342,7 @@ class SecretsPage(ScrollPage):
         del text
         ttk.Button(win, text="关闭", command=win.destroy).pack()
         win.protocol("WM_DELETE_WINDOW", win.destroy)
+        motion.fade_in_window(win)  # 与模态框同语言：偶尔出现的表面 150ms 淡入
 
     def _on_copy(self, name: str) -> None:
         if not name:

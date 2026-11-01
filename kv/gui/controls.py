@@ -176,6 +176,7 @@ class TabBar(ttk.Frame):
         self._on_change = on_change
         self._pill: str | None = None
         self._pill_x = motion.Spring(self, lambda x: self._place_pill(round(x)))
+        self._hover_gens: dict[str, int] = {}  # 各标签在飞 hover 过渡的代际令牌
 
         self._strip = tk.Canvas(
             self, height=theme.CONTROL_HEIGHT, bg=theme.SURFACE, highlightthickness=0, bd=0,
@@ -273,11 +274,32 @@ class TabBar(ttk.Frame):
             self.on_show_first()
 
     def _hover(self, key: str, on: bool) -> None:
-        """非选中标签的文字色 hover 渐变——与按钮同款反馈语言。"""
+        """非选中标签的文字色 hover 渐变（3 帧 ≈48ms，near-imperceptible 快档）
+        ——与按钮/侧边栏同款反馈语言。代际令牌防叠加：期间再触发就重定向，
+        切换选中（_repaint 接管颜色）或重排（item 已删）即停手。"""
         if key == self._current:
             return
-        color = theme.TEXT if on else theme.TEXT_SECONDARY
-        self._strip.itemconfigure(f"label-{key}", fill=color)
+        gen = self._hover_gens.get(key, 0) + 1
+        self._hover_gens[key] = gen
+        item = f"label-{key}"
+        try:
+            src = self._strip.itemcget(item, "fill")
+        except tk.TclError:
+            return  # 重排刚清掉画布
+        target = theme.TEXT if on else theme.TEXT_SECONDARY
+
+        def tick(step: int = 0) -> None:
+            if self._hover_gens.get(key) != gen or key == self._current:
+                return
+            try:
+                self._strip.itemconfigure(item, fill=motion.lerp_color(
+                    src, target, min(step / 3, 1.0)))
+            except tk.TclError:
+                return  # 控件已销毁/重排
+            if step < 3:
+                self._strip.after(motion.FRAME_MS, tick, step + 1)
+
+        tick()
 
     def _place_pill(self, x: int) -> None:
         """选中底色块（圆角胶囊）：先删旧再画，挂在当前 tab 的 tag 上保证可点击。"""

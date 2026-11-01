@@ -78,6 +78,31 @@ def _ui_scale() -> float:
         return 1.0  # vault 未初始化/损坏时按 100%，不挡启动
 
 
+def _dark_title_bar(window) -> None:
+    """Windows 深色标题栏（best-effort：不支持或失败都保持系统默认）。
+
+    深墨蓝侧边栏配系统默认白标题栏，是当前界面最刺眼的一道断裂；DWM
+    属性一改即得。与 DPI 感知同理放 shim——ctypes 出错的失败模式是进程级
+    崩溃，按 test_arch 的隔离规则 FFI 只允许在入口与 crypto/capture
+    （10-06 曾把这段写进 kv/gui/ 被门禁正确拦下，这次放在规则允许的位置）。
+    """
+    try:
+        import ctypes
+
+        window.update_idletasks()  # 顶层包装 HWND 在完成几何布局后才可靠
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
+        if not hwnd:
+            return
+        value = ctypes.c_int(1)
+        for attribute in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE（Win10 旧版取 19）
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value),
+            ) == 0:
+                return
+    except Exception:
+        pass  # 非 Windows / 无 dwmapi：标题栏保持系统默认
+
+
 from kv.gui import theme  # noqa: E402  —— 必须在 sys.path 修好之后导入
 
 theme.init(_dpi_scale())
@@ -85,4 +110,4 @@ theme.init(_dpi_scale())
 from kv.gui import launch  # noqa: E402
 
 if __name__ == "__main__":
-    launch(ui_scale=_ui_scale())
+    launch(ui_scale=_ui_scale(), on_window=_dark_title_bar)

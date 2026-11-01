@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 import tkinter as tk
 
-from kv.gui import theme
+from kv.gui import motion, theme
 
 _LAST_HIDDEN = 0.0  # 上一个气泡消失的时刻（monotonic 秒）
 
@@ -70,6 +70,9 @@ class Tooltip:
         if overflow > 0:
             x -= overflow + theme.sp(8)
         tip.geometry(f"+{x}+{y}")
+        # 气泡属「数十次/天」档：64ms 快档淡入，near-imperceptible——
+        # 消掉硬弹出的突兀又不拖慢连续扫提示的节奏
+        motion.fade_in_window(tip, ms=64, steps=4)
         self._tip = tip
 
     def _hide(self, _event=None) -> None:

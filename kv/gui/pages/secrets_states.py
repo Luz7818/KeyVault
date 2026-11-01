@@ -9,7 +9,7 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Callable
 
-from kv.gui import icons, theme
+from kv.gui import icons, motion, theme
 from kv.gui.controls import Card, RoundButton
 
 EMPTY_TEXTS = {
@@ -44,6 +44,8 @@ class StateCards:
             "capture": go_capture, "settings": go_settings,
         }
         self._clear_filters = clear_filters
+        self._art_job: str | None = None
+        self._art_scale = 1.0
         self._build_empty(parent)
         self._build_no_match(parent)
 
@@ -75,19 +77,42 @@ class StateCards:
         self._btn3 = RoundButton(row, "", lambda: None)
         self._btn3.pack(side="left", padx=(theme.GAP, 0))
 
-    def _draw_art(self) -> None:
-        """空态插图：主色浅底圆 + 钥匙线稿。"""
+    def _draw_art(self, scale: float | None = None) -> None:
+        """空态插图：主色浅底圆 + 钥匙线稿。scale 供入场动画整体缩放。"""
         c = self._art
         c.delete("all")
-        s = _px(72)
-        c.create_oval(_px(4), _px(4), s - _px(4), s - _px(4),
+        if scale is not None:
+            self._art_scale = scale
+        full = _px(72)
+        half = full / 2
+        rr = (half - _px(4)) * self._art_scale  # 圆心恒在画布中心，半径缩放
+        c.create_oval(half - rr, half - rr, half + rr, half + rr,
                       fill=theme.ACCENT_SOFT, outline="")
-        icons.draw_key(c, s / 2, s / 2, _px(30), theme.ACCENT)
+        icons.draw_key(c, half, half, _px(30) * self._art_scale, theme.ACCENT)
+
+    def _play_art_entrance(self) -> None:
+        """空态插图入场：0.85→1 缓出 6 帧（≈96ms）。空态是 rare/first-time
+        层级——惊喜预算花在这里；已在屏上（空库时反复刷新）不重播。"""
+        if self.empty.winfo_ismapped():
+            return
+        if self._art_job is not None:
+            self._art.after_cancel(self._art_job)
+        steps = 6
+
+        def tick(step: int = 0) -> None:
+            self._art_job = None
+            if not self._art.winfo_exists():
+                return
+            self._draw_art(0.85 + 0.15 * motion.ease_out((step + 1) / steps))
+            if step + 1 < steps:
+                self._art_job = self._art.after(motion.FRAME_MS, tick, step + 1)
+
+        tick()
 
     def show_empty(self, mode: str) -> None:
         """uninitialized → 一键建库；empty → 添加或去捕获。"""
         title, hint, b1, b2, b3 = EMPTY_TEXTS[mode]
-        self._draw_art()
+        self._draw_art(1.0)
         self._empty_title.config(text=title)
         self._empty_hint.config(text=hint)
         primary = "init" if mode == "uninitialized" else "add"
@@ -97,6 +122,7 @@ class StateCards:
         self._btn2.set_command(self._actions["settings"])
         self._btn3.set_text(b3)
         self._btn3.set_command(self._actions["capture"])
+        self._play_art_entrance()
 
     # ------------------------------------------------------------ 无匹配
 
