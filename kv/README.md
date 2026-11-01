@@ -28,6 +28,7 @@ kv 是项目的核心 Python 包。它接收 CLI 命令（来自 `kv.py` shim �
 | `crypto/` | Windows DPAPI 封装（ctypes），protect/unprotect/self_test |
 | `detect/` | 检测规则定义、多阶段解析、用户纠正、报告格式化 |
 | `gui/` | tkinter 桌面 GUI（叶子模块），侧边栏导航 + 6 个功能页 |
+| `host/` | 浏览器扩展的原生消息宿主：帧协议、请求分发、注册表/manifest 管理 |
 | `ops/` | 操作命令：save、scan、rotate、import、inject、expiry、purge、fix、review |
 | `parse/` | 输入解析：dotenv、AWS CSV、curl、JSON、bare 文本、pipeline 编排 |
 

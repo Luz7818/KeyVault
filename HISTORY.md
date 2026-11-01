@@ -770,3 +770,30 @@ sp(18) 滑入的同时旧页向左微退 sp(8)，新页左缘露出的条带是�
 - 发布产物：`packaging/build.bat` 重建 dist/kv.exe 与 kv-cli.exe（PyInstaller 6.22.3），
   `packaging/verify.py` 五查（版本/init/golden/_wipe/GUI）全过。
 - 门禁：全量两遍 `Ran 619, OK`；金标 92 PASS；check_docs 阻断 0 提醒 0。
+
+## 2026-11-02 · 浏览器扩展批1：原生消息宿主 kv/host/（扩展 + Python 宿主架构）
+
+- **可行性结论**：纯浏览器插件不可行——Python/DPAPI/SQLite/审计链进不了浏览器
+  沙箱，重写等于放弃现有 core；采用 1Password/Bitwarden 同款的「MV3 扩展 +
+  native messaging 宿主」架构：扩展管事件与界面，加密/存储/审计全留本机 vault。
+- **新增 `kv/host/`**（入口 shim `kv_host.py`，架构决策详见 ARCHITECTURE.md 末节）：
+  - `protocol.py`：native messaging 帧协议（4 字节小端长度 + UTF-8 JSON），
+    入站 4 MB 闸、出站 1 MB 拒发；零长帧显式报错。
+  - `service.py`：ping/capture/approve/reject/list/copy 六请求分发。捕获 =
+    pipeline.parse + resolve（第 5 级信号用页面标题，与 watch 的窗口标题同语义）
+    → 全量 spool 进 inbox（静息态只有 DPAPI 密文，页面 URL 随行 context_json，
+    approve 时落 source_url 列）；promptable 口径与 `PendingItem.auto_acceptable`
+    一致——「歧义绝不猜厂商」跨端不变。列表只出掩码行；复制走 copy_secret
+    （排除 Win+V 历史 + 30s 自动擦除）。协议通道上任何异常都折成 {"error"} 响应。
+  - `app.py`：stdio 主循环（tty 直跑拒绝 + vault 未就绪降级到 ping-only）；
+    `registry.py`/`install.py`：manifest 写 `%LOCALAPPDATA%\KeyVault\host\`、
+    Chrome/Edge 各写 HKCU 注册键（不提权）；`kv host install/uninstall/status`
+    三个 CLI 命令（commands/host.py，dev 态注册需 `--host-path` 显式指定）。
+- **配套**：`kv/ops/review.py` 的 `spool()` 增加可选 `context` 参数（并进
+  context_json，向后兼容）；`kv_host.py` shim 承接冻结态 `_wipe` 分发与
+  `--version`（与 kv_gui 的 `_wipe` 对子并列，spawn_helper 不改）。
+- 测试 +34（帧协议往返/坏帧、捕获→spool→approve/reject 全链、去重三态
+  pending/already_pending/existing、掩码断言、CLI 安装/卸载/状态 + 内存注册表
+  替身、扩展 ID 校验）；真实 `kv host install` 冒烟通过后即卸载还原注册表。
+- 门禁：全量 unittest 绿 + 金标 92 PASS + check_docs 零阻断；test_arch 全过
+  （host 不 import gui/cli/ctypes、无 DML 字符串、行数预算内）。

@@ -17,6 +17,7 @@ from kv import PROGRAM, __version__, console, errors
 from kv.commands import backup as backupcmd
 from kv.commands import capture as capturecmd
 from kv.commands import detect as detectcmd
+from kv.commands import host as hostcmd
 from kv.commands import ingest as ingestcmd
 from kv.commands import maintenance as maintcmd
 from kv.commands import store as storecmd
@@ -128,6 +129,31 @@ def _totp_parser(sub, common) -> None:
                        help="生成记录的两步验证码（值需是 base32 种子，RFC 6238）")
     p.add_argument("name")
     p.set_defaults(func=storecmd.cmd_totp)
+
+
+def _host_parsers(sub, common) -> None:
+    """浏览器扩展的原生消息宿主：注册、卸载、状态。"""
+    p = sub.add_parser("host", parents=[common],
+                       help="浏览器原生消息宿主（扩展连接器）注册管理")
+    host_sub = p.add_subparsers(dest="host_command", required=True, metavar="动作")
+
+    i = host_sub.add_parser("install", parents=[common],
+                            help="写 manifest 并注册到 Chrome/Edge（HKCU，不提权）")
+    i.add_argument("--browser", default="all", choices=["chrome", "edge", "all"],
+                   help="注册到哪个浏览器（默认两个都注册）")
+    i.add_argument("--extension-id", default="",
+                   help="扩展 ID，多个用逗号分隔；缺省交互询问")
+    i.add_argument("--host-path", default="", help=argparse.SUPPRESS)
+    i.add_argument("--manifest-dir", default="", help=argparse.SUPPRESS)
+    i.set_defaults(func=hostcmd.cmd_install)
+
+    u = host_sub.add_parser("uninstall", parents=[common],
+                            help="移除注册表键（manifest 文件保留）")
+    u.add_argument("--browser", default="all", choices=["chrome", "edge", "all"])
+    u.set_defaults(func=hostcmd.cmd_uninstall)
+
+    s = host_sub.add_parser("status", parents=[common], help="查看各浏览器的注册状态")
+    s.set_defaults(func=hostcmd.cmd_status)
 
 
 def _backup_parsers(sub, common) -> None:
@@ -314,6 +340,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _store_parsers(sub, common)
     _totp_parser(sub, common)
+    _host_parsers(sub, common)
     _detect_parsers(sub, common)
     _capture_parsers(sub, common)
     _maintenance_parsers(sub, common)

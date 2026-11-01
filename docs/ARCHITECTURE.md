@@ -97,3 +97,37 @@ enc_key(32) + mac_key(32)；流加密 SHA256(key||nonce||counter)（nonce 16B
 随机保证唯一）；encrypt-then-MAC。stdlib 无 AES，此组合（scrypt + HMAC
 + SHA256-CTR）是不引入依赖下防御充分的选择；若未来允许依赖，首选
 AES-GCM 平移。恢复走 saveops.commit 正常入库（去重 + 审计链复用）。
+
+## 浏览器扩展与原生消息宿主（2026-11-02，随浏览器扩展批落地）
+
+**形态**：MV3 扩展（`extension/`，Chrome/Edge）+ Python 原生消息宿主
+（`kv/host/`，入口 shim `kv_host.py`，打包产物 `dist/kv-host.exe`）。
+浏览器沙箱里跑不了 Python/DPAPI——扩展只负责「事件与界面」，加密、存储、
+审计链全部留在本机 vault；两边用 Chrome native messaging 相连
+（stdin/stdout 上的 4 字节小端长度前缀 + UTF-8 JSON，stdlib 实现）。
+这是 1Password/Bitwarden 桌面集成的同款架构。
+
+**协议**（`kv/host/protocol.py`）：入站自设 4 MB 闸、出站超 1 MB 拒发
+（浏览器上限）；宿主 stdout 是协议通道，任何库输出都进不得——日志只走
+stderr（`kv/host/log.py`）。请求：ping/capture/approve/reject/list/copy。
+
+**捕获语义**（`kv/host/service.py`）：网页 copy 事件的文本 →
+`pipeline.parse` + `resolve`（第 5 级信号用页面标题——浏览器标签页标题
+本就出现在 OS 窗口标题里，语义与 watch 一致）→ **全量 spool 进 inbox**
+（静息态只有 DPAPI 密文；页面 URL 等非敏感上下文随行进 context_json，
+approve 时落进记录的 source_url 列）。扩展内提示条只对 promptable
+（exact/high/manual 且平台非 unknown，与 `PendingItem.auto_acceptable`
+同口径）的候选出现；歧义/低置信留在 inbox 由桌面审批——「歧义绝不猜
+厂商」跨端不变。列表只出掩码行；复制走 `copy_secret`（排除 Win+V 历史
++ 30s 自动擦除，与桌面同路）。
+
+**注册**（`kv/host/registry.py` + `install.py`，CLI `kv host install/
+uninstall/status`）：manifest 写 `%LOCALAPPDATA%\KeyVault\host\`，Chrome/
+Edge 各写一个 HKCU 注册表键（不提权，与 vault 的用户绑定同一信任边界）；
+`allowed_origins` 只放行显式登记的扩展 ID。开发态没有独立宿主 exe，
+必须 `--host-path` 显式指定——注册表里只允许出现真实可执行文件。
+
+**依赖方向**：`kv/host` 位于 ops 之上（core/ops/capture 的消费方），
+不 import gui/cli/ctypes；第三个冻结 exe 在 spec 里独立 Analysis，
+`_wipe` 冻结分发由 `kv_host.py` shim 承接（与 `kv_gui.py` 成对，
+`spawn_helper` 不改）。

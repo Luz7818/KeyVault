@@ -276,10 +276,21 @@ def mark_inbox_decided(store, item: PendingItem, accepted: bool) -> None:
         repo.mark_inbox(conn, item.inbox_id, "accepted" if accepted else "rejected")
 
 
-def spool(store, item: PendingItem, *, ttl_days: float = 7.0) -> int | None:
-    """--spool 模式：把候选 DPAPI 加密后写进 inbox。**静息状态永不明文。**"""
+def spool(store, item: PendingItem, *, ttl_days: float = 7.0,
+          context: dict | None = None) -> int | None:
+    """--spool 模式：把候选 DPAPI 加密后写进 inbox。**静息状态永不明文。**
+
+    context 是调用方的随行元数据（如浏览器捕获的页面 URL），并进 context_json
+    原样保存——只是 JSON 负载，不新增 schema。
+    """
     canonical = item.candidate.canonical()
     head, tail = masking.split_mask(canonical, *item.verdict.mask_style)
+    merged_context = {
+        "span": item.candidate.span,
+        "hostnames": list(item.candidate.hostnames),
+        "context_hostnames": list(item.candidate.context_hostnames),
+        **(context or {}),
+    }
     with store.session() as conn:
         existing = repo.get_secret_by_sha256(conn, item.candidate.sha256())
         if existing is not None:
@@ -299,11 +310,7 @@ def spool(store, item: PendingItem, *, ttl_days: float = 7.0) -> int | None:
             "suggested_name": saveops.suggest_name(conn, item.verdict.platform,
                                                    item.candidate.key_name),
             "source": item.candidate.source,
-            "context_json": json.dumps({
-                "span": item.candidate.span,
-                "hostnames": list(item.candidate.hostnames),
-                "context_hostnames": list(item.candidate.context_hostnames),
-            }, ensure_ascii=False),
+            "context_json": json.dumps(merged_context, ensure_ascii=False),
             "captured_at": clock.now_iso(),
             "ttl_until": clock.plus_days(ttl_days),
             "status": "pending",
