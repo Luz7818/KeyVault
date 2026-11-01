@@ -8,7 +8,7 @@ kv 是项目的核心 Python 包。它接收 CLI 命令（来自 `kv.py` shim �
 
 | 文件 | 干什么 | 备注 |
 |---|---|---|
-| `__init__.py` | 版本号 `0.1.0`、`SCHEMA_VERSION=1`、`PROGRAM="kv"` | 常量定义 |
+| `__init__.py` | 版本号 `0.2.0`、`SCHEMA_VERSION=1`、`PROGRAM="kv"` | 常量定义 |
 | `__main__.py` | `python -m kv` 入口，调用 `cli.main()` | 入口 |
 | `cli.py` | argparse 命令树 + dispatch | 入口，所有子命令在这里注册 |
 | `console.py` | stdio 设置、掩码渲染、表格输出、用户交互 | 被所有命令引用 |
