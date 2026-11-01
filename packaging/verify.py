@@ -1,6 +1,6 @@
 """打包产物校验 —— build.bat 的最后一步。
 
-五查（任一失败退出码 1，不依赖人工目视）：
+六查（任一失败退出码 1，不依赖人工目视）：
   1. 版本号   dist/kv-cli.exe --version 与 kv/__init__.py 的 __version__ 一致
   2. init     kv-cli.exe 能在临时目录建库（覆盖 schema.sql 进包）
   3. golden   kv-cli.exe selftest --golden 通过（覆盖 tests/corpus 进包；
@@ -8,6 +8,8 @@
   4. _wipe    kv.exe 的冻结态 CLI 短路立即退出、不弹窗口（copy 擦除 helper 的宿主）
   5. GUI      kv.exe 真启动（窗口标题出现即算），随后只回收「本次新起」的进程 ——
               用户自己开着的 kv.exe 绝不动
+  6. host     dist/kv-host.exe --version 正确 + native messaging 协议 ping
+              往返（真帧进真帧出，浏览器会话的最小复现）
 
 用法（仓库根或 packaging/ 均可）：
     python packaging/verify.py
@@ -20,8 +22,10 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import tempfile
@@ -37,6 +41,7 @@ from kv import console  # noqa: E402
 DIST = ROOT / "dist"
 KV_CLI = DIST / "kv-cli.exe"
 KV_GUI = DIST / "kv.exe"
+KV_HOST = DIST / "kv-host.exe"
 GUI_TITLE = "KeyVault"
 GUI_WAIT_SECONDS = 40
 
@@ -114,6 +119,57 @@ def check_wipe_dispatch(vault_dir: Path) -> None:
         FAILURES.append(f"_wipe 分发异常：exit {result.returncode}（期望 2）")
 
 
+def _host_frame(message: dict) -> bytes:
+    payload = json.dumps(message).encode("utf-8")
+    return struct.pack("<I", len(payload)) + payload
+
+
+def _read_host_frame(stream) -> dict:
+    header = stream.read(4)
+    if not header:
+        return {}
+    (length,) = struct.unpack("<I", header)
+    return json.loads(stream.read(length).decode("utf-8"))
+
+
+def check_host() -> None:
+    """kv-host.exe 两查：--version 单源一致；协议 ping 真帧往返（未初始化
+    vault 时 initialized=false 也算过——浏览器拉起即报状态是宿主的契约）。"""
+    result = run([str(KV_HOST), "--version"], timeout=60)
+    got = (result.stdout or "").strip()
+    want = f"kv-host {expected_version()}"
+    if result.returncode == 0 and got == want:
+        console.ok(f"host        版本 {got}")
+    else:
+        FAILURES.append(f"kv-host 版本不符：期望 {want!r}，得到 {got!r}（exit {result.returncode}）")
+        return
+
+    env = {**os.environ, "KV_VAULT_DIR": str(Path(tempfile.gettempdir()) / "kv-verify-empty-vault")}
+    proc = subprocess.Popen(
+        [str(KV_HOST)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL, env=env,
+    )
+    try:
+        proc.stdin.write(_host_frame({"type": "ping"}))
+        proc.stdin.flush()
+        pong = _read_host_frame(proc.stdout)
+        if pong.get("pong") is True and pong.get("initialized") is False:
+            console.ok("host        native messaging ping 往返正常（未初始化如实上报）")
+        else:
+            FAILURES.append(f"kv-host ping 异常：{pong!r}")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        FAILURES.append(f"kv-host ping 失败：{exc}")
+    finally:
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
 def check_gui_starts(vault_dir: Path) -> None:
     before = set(kv_processes())
     env = {**os.environ, "KV_VAULT_DIR": str(vault_dir)}
@@ -147,7 +203,7 @@ def main() -> int:
     parser.add_argument("--skip-gui", action="store_true", help="跳过 GUI 启动检查")
     args = parser.parse_args()
 
-    for exe in (KV_CLI, KV_GUI):
+    for exe in (KV_CLI, KV_GUI, KV_HOST):
         if not exe.exists():
             console.error(f"缺少产物：{exe} —— 先跑 packaging/build.bat")
             return 1
@@ -160,6 +216,7 @@ def main() -> int:
         vault_dir = Path(tmp) / "vault"
         check_init_and_golden(vault_dir)
         check_wipe_dispatch(vault_dir)
+        check_host()
         if args.skip_gui:
             console.warn("GUI 启动检查已跳过（--skip-gui）")
         else:

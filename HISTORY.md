@@ -822,3 +822,23 @@ sp(18) 滑入的同时旧页向左微退 sp(8)，新页左缘露出的条带是�
   行为验证 = 浏览器加载扩展手工走查（README 有步骤）。
 - 门禁：全量 unittest 绿 + check_docs 零阻断（extension/ 板块说明/目录说明/
   架构索引三处齐）。
+
+## 2026-11-02 · 浏览器扩展批3 + v0.3.0 发布收口
+
+- **打包**：`kv.spec` 三个独立 Analysis/PYZ/EXE——新增 `dist/kv-host.exe`
+  （入口 `kv_host.py`，console=True：宿主必须继承标准句柄，windowed 冻结进程
+  stdout 是 None，协议通道就没了）；datas 按 test_arch 对每个块的统一断言带上
+  schema.sql + corpus。`build.bat` 产物文案同步（保持纯 ASCII）。
+- **verify.py 五查 → 六查**：新增 host 查——`--version` 单源一致 + native
+  messaging **真帧 ping 往返**（管道子进程，未初始化 vault 如实上报
+  initialized=false 也算过——「浏览器拉起即报状态」是宿主契约）。
+- **真机走查的边界（诚实记录）**：本会话的浏览器自动化通道（iab/cdp）不支持
+  加载未打包扩展，扩展侧 JS 的行为验证 = 语法检查 + 代码评审 + 文档化手动
+  三步（GET-START §4.8）；宿主侧全链已有真子进程 e2e（capture→approve→
+  list→copy，含响应无明文断言）与打包后协议 ping 两道机器门禁。
+- **v0.3.0**（单源 `kv/__init__.py`，manifest.json 同步 0.3.0）：本版 =
+  浏览器扩展三件（宿主/扩展/打包）+ v0.2.0 的全部内容。数字对账：
+  655 条测试、129 个 `.py`、23 023 行；README/TESTING/AGENTS 同步。
+- 发布产物：`packaging/build.bat` 重建 dist 三件（kv.exe / kv-cli.exe /
+  kv-host.exe），`verify.py` 六查全过。
+- 门禁：全量两遍 `Ran 659, OK`；金标 92 PASS；check_docs 零阻断。

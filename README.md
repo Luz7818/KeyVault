@@ -6,7 +6,7 @@ kv 是一个纯 Python 实现的本地密钥保管 CLI 工具，用 Windows DPAP
 
 输入一条 `kv add --name ds --value sk-abc...`，值经 DPAPI 加密后写入 SQLite；`kv copy ds` 把明文放到剪贴板，30 秒后自动擦除；`kv scan ./repo` 扫描目录树，用已存指纹匹配泄露的密钥，输出文件名和行号。
 
-**619 条测试 · 116 个源文件 · 21 667 行 Python（复核：`python -I -m unittest discover -s tests -t .`、
+**659 条测试 · 129 个源文件 · 23 088 行 Python（复核：`python -I -m unittest discover -s tests -t .`、
 `find . -name "*.py" -not -path "*/__pycache__/*" | wc -l` 及同命令把 `wc -l` 换成按文件累加行数）**
 
 ## 30 秒跑通
@@ -28,6 +28,7 @@ vault 默认建在 `%LOCALAPPDATA%\KeyVault\`，不在当前目录；可用 `--v
 |---|---|---|
 | 存取密钥 | `kv add` / `kv show` / `kv reveal` / `kv rm` | [kv/commands/store.py](kv/commands/store.py) |
 | 桌面 GUI | `python kv_gui.py` 或 `dist/kv.exe` | [kv/gui/](kv/gui/) |
+| 浏览器扩展宿主 | `python kv_host.py` 或 `dist/kv-host.exe`（`kv host install` 注册） | [kv/host/](kv/host/) |
 | 命令行打包版 | `dist/kv-cli.exe`（build.bat 产出，与 kv.exe 同批） | [packaging/](packaging/) |
 | 泄露扫描 | `kv scan <目录>` | [kv/ops/scan.py](kv/ops/scan.py) |
 | 剪贴板捕获 | `kv copy` / `kv watch` | [kv/capture/](kv/capture/) |
@@ -45,7 +46,7 @@ vault 默认建在 `%LOCALAPPDATA%\KeyVault\`，不在当前目录；可用 `--v
 | 目录 | 负责 |
 |---|---|
 | `kv/` | 主包：CLI、加密、检测、存储、操作 |
-| `tests/` | 测试套件：619 条用例 + 金标语料 |
+| `tests/` | 测试套件：659 条用例 + 金标语料 |
 
 逐个目录的说明见各目录下的 `README.md`。
 

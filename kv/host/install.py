@@ -28,9 +28,22 @@ def manifest_dir() -> Path:
 
 
 def default_host_path() -> Path:
-    """打包态返回自身 exe；开发态明确报错（见模块 docstring）。"""
+    """打包态找同目录的 kv-host.exe；开发态明确报错（见模块 docstring）。
+
+    不能直接用 sys.executable：`kv host install` 常从 kv-cli.exe 跑——
+    把 CLI 注册成宿主的话，浏览器拉起它只会得到 argparse 的报错。
+    """
     if getattr(sys, "frozen", False):
-        return Path(sys.executable)
+        exe = Path(sys.executable)
+        if exe.name.lower() == "kv-host.exe":
+            return exe
+        sibling = exe.parent / "kv-host.exe"
+        if sibling.exists():
+            return sibling
+        raise errors.UsageError(
+            f"没有在 {exe.parent} 找到 kv-host.exe",
+            hint="先跑 packaging\\build.bat 产出三件套，或用 --host-path 显式指定宿主",
+        )
     raise errors.UsageError(
         "开发态没有独立的宿主可执行文件可注册",
         hint="先跑 packaging\\build.bat 产出 dist\\kv-host.exe，"

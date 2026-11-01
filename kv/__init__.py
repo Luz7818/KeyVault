@@ -1,6 +1,6 @@
 """KeyVault —— 本地优先的统一密钥保管工具。"""
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 SCHEMA_VERSION = 1
 

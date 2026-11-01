@@ -8,6 +8,7 @@ winreg 动作整体替换成内存记录（真实 HKCU 不进测试）；manifes
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -148,6 +149,57 @@ class TestIdValidation(unittest.TestCase):
 
         with self.assertRaises(errors.UsageError):
             installmod._validated_ids([])
+
+
+class TestDefaultHostPath(unittest.TestCase):
+    """default_host_path：冻结态找同目录 kv-host.exe（绝不把 kv-cli 注册成宿主）。"""
+
+    def tearDown(self):
+        sys.frozen = self._old_frozen
+        sys.executable = self._old_executable
+
+    def _frozen(self, executable: str):
+        self._old_frozen = getattr(sys, "frozen", False)
+        self._old_executable = sys.executable
+        sys.frozen = True
+        sys.executable = executable
+
+    def test_frozen_cli_picks_sibling_kv_host(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sibling = Path(tmp) / "kv-host.exe"
+            sibling.write_bytes(b"MZ")
+            self._frozen(str(Path(tmp) / "kv-cli.exe"))
+            self.assertEqual(installmod.default_host_path(), sibling)
+
+    def test_frozen_host_returns_itself(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            me = Path(tmp) / "kv-host.exe"
+            me.write_bytes(b"MZ")
+            self._frozen(str(me))
+            self.assertEqual(installmod.default_host_path(), me)
+
+    def test_frozen_without_sibling_errors(self):
+        import tempfile
+
+        from kv import errors
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self._frozen(str(Path(tmp) / "kv-cli.exe"))
+            with self.assertRaises(errors.UsageError):
+                installmod.default_host_path()
+
+    def test_dev_mode_errors(self):
+        from kv import errors
+
+        self._old_frozen = getattr(sys, "frozen", False)
+        self._old_executable = sys.executable
+        sys.frozen = False
+        with self.assertRaises(errors.UsageError):
+            installmod.default_host_path()
 
 
 if __name__ == "__main__":
