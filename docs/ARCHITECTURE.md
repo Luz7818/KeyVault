@@ -65,7 +65,8 @@ kv.py / kv_gui.py（shim）
 
 | 子目录 | 说明 |
 |---|---|
-| `kv/` | [`kv/README.md`](../kv/README.md)（8 个子包逐个说明） |
+| `kv/` | [`kv/README.md`](../kv/README.md)（9 个子包逐个说明） |
+| `extension/` | [`extension/README.md`](../extension/README.md)（浏览器扩展，MV3） |
 | `tests/` | [`tests/README.md`](../tests/README.md) |
 | `docs/` `build/` `dist/` | 豁免（见 `.docsignore`；docs 是文档目录本身，build/dist 是产物） |
 

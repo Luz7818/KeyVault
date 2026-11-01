@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "KeyVault",
+  "version": "0.3.0",
+  "description": "本地密钥保管箱 KeyVault 的浏览器伴侣：网页复制的密钥自动检测入队，高置信的一键存入；随时搜索复制。",
+  "permissions": ["nativeMessaging"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "KeyVault"
+  },
+  "icons": {
+    "16": "icons/icon.png",
+    "48": "icons/icon.png",
+    "128": "icons/icon.png"
+  }
+}

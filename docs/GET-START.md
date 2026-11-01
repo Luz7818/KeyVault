@@ -129,6 +129,29 @@ python kv.py use my-api-key --to ./my-project/.env
 
 从 vault 取出明文，写入目标 `.env` 文件的对应变量。自动检查 `.gitignore`。
 
+### 4.8 浏览器扩展：网页复制的 key 自动入队
+
+三步装好（Chrome/Edge 同样操作）：
+
+```bash
+# 1. 注册本机宿主（写 manifest + HKCU 注册表键，不提权）。
+#    打包态：packaging/build.bat 产出 dist/kv-host.exe 后，命令自动用 exe。
+python kv.py host install --extension-id <扩展ID>
+
+# 2. 浏览器打开 chrome://extensions → 开发者模式 → 加载解压缩的扩展
+#    → 选择仓库的 extension/ 目录 → 从扩展卡片复制 ID
+#    （若 ID 与第 1 步不同，重跑上面命令补注册新 ID）
+
+# 3. 随便打开一个网页，复制一段 API key 试试
+```
+
+预期看到：页面右下角浮出「检测到 API Key」提示条（高置信候选），点
+「存入 KeyVault」即入库（来源 URL 一并记录）；低置信/歧义候选不打扰
+网页，静默进入捕获页审批队列（桌面 GUI 或 `kv review` 处理）。工具栏
+popup 可搜索已存密钥并一键复制（同样走 30 秒自动擦除）。
+
+卸载：`python kv.py host uninstall`；状态：`python kv.py host status`。
+
 ## 5. 想改它:常见三种改动
 
 ### 5.1 加一条检测规则

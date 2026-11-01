@@ -797,3 +797,28 @@ sp(18) 滑入的同时旧页向左微退 sp(8)，新页左缘露出的条带是�
   替身、扩展 ID 校验）；真实 `kv host install` 冒烟通过后即卸载还原注册表。
 - 门禁：全量 unittest 绿 + 金标 92 PASS + check_docs 零阻断；test_arch 全过
   （host 不 import gui/cli/ctypes、无 DML 字符串、行数预算内）。
+
+## 2026-11-02 · 浏览器扩展批2：extension/ MV3 扩展（捕获提示条 + popup 搜索复制）
+
+- **新增 `extension/` 一级目录**（板块说明四段齐备，目录说明/ARCHITECTURE 已登记）：
+  - `manifest.json`（MV3）：权限只有 nativeMessaging；内容脚本 `<all_urls>`；
+    Chrome/Edge 通用（同为 Chromium，native messaging 注册表路径不同但 manifest 相同）。
+  - `content.js`：监听页面 copy/cut 事件（用户主动动作，clipboardData 即被复制
+    内容，**不需要 clipboardRead 权限**，也读不到用户没复制的东西）→ 文本 +
+    页面 URL/标题发宿主检测；**恰有一条 promptable 候选**才在页内弹提示条
+    （Shadow DOM 隔离样式、全 textContent、异常就地吞掉——扩展绝不弄坏网页）。
+    提示条 [存入] → approve（记录带页面 URL），[忽略] → reject；多条/低置信
+    静默进桌面审批队列。页面级 20 条去重环防同文本重发。
+  - `background.js` + `host-client.js`：SW 只做请求转发（零业务逻辑）；宿主
+    连接用**每次操作一条短连接**——MV3 SW 会被浏览器回收，长连接保活不可靠，
+    每次拉起宿主的百毫秒开销对复制/点击可接受；一切失败折成 {error} 响应。
+  - `popup.html/css/js`：搜索已存密钥（宿主 list，掩码行）→ 点击复制（宿主
+    copy_secret，30s 自动擦除）；状态点显示宿主连接与 vault 初始化状态。
+  - `icons/icon.png` 与 packaging/icon.png 同源整包复用。
+- **测试**：+2 e2e（`tests/test_host_e2e.py`，真子进程跑 kv_host.py shim，
+  stdio 上 ping → capture → approve → list → copy 全链断言响应无明文、
+  source_url 落进记录；坏帧终止 exit 1——subprocess 级按 TestSubprocess 模式）。
+  扩展侧 JS 无 Python 门禁：4 个 JS 文件语法检查 + manifest JSON 校验，
+  行为验证 = 浏览器加载扩展手工走查（README 有步骤）。
+- 门禁：全量 unittest 绿 + check_docs 零阻断（extension/ 板块说明/目录说明/
+  架构索引三处齐）。
