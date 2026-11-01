@@ -21,5 +21,7 @@
 
 ## CI 与 PR
 
-- 无 CI（stdlib 零依赖项目的选择）；门禁 = 全量 unittest + `selftest --golden`。
-- 无 PR 流程，直接提交 `main`。
+- CI：GitHub Actions（`.github/workflows/ci.yml`，2026-11-01 接入）——windows-latest
+  上跑全量 unittest + `selftest --golden`，push main 与 PR 触发。DPAPI 绑定 Windows，
+  门禁只在 windows-latest 有意义。
+- 无 PR 流程约束（直接提交 `main`），PR 路径是为外部贡献保留的。

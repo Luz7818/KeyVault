@@ -756,3 +756,17 @@ sp(18) 滑入的同时旧页向左微退 sp(8)，新页左缘露出的条带是�
   ——TOTP 入口逻辑移入 totp_window、totp parser 独立成组后全部回预算内）。
   TOTP 活码窗截图目检（倒计时环/大码/复制按钮排版正确）。
 - 门禁：`Ran 619, OK (skipped=2~3)`；金标 92 PASS 不受影响。
+
+## 2026-11-01 · v0.2.0 发布收口（版本、CI、发布产物）
+
+- **版本 `0.1.0` → `0.2.0`**（单源 `kv/__init__.py`）：本版累计 = KV 待办清账批 +
+  UI/动画强化批 + TOTP/剪贴板倒计时批，功能面与 UI 都有实质变化，升 minor。
+- **CI 接入（P3-2 清账）**：`.github/workflows/ci.yml`——windows-latest（DPAPI 绑定
+  Windows，门禁只在这上有意义）跑全量 unittest + 金标；runner 无 vault 时闸门记录
+  按既有设计跳过（`_record_gate` 的 warn 路径）。docs/GIT.md「CI 与 PR」同步改口。
+- **数字对账**：README/TESTING/AGENTS 的 603 → 619、源文件 110/112 → 116 个 `.py`
+  （+kv/ops/totp.py、kv/gui/totp_window.py、tests/test_ops_totp.py、
+  tests/test_gui_totp.py）、21 667 行；AGENTS 版本行与 CI 行同步。
+- 发布产物：`packaging/build.bat` 重建 dist/kv.exe 与 kv-cli.exe（PyInstaller 6.22.3），
+  `packaging/verify.py` 五查（版本/init/golden/_wipe/GUI）全过。
+- 门禁：全量两遍 `Ran 619, OK`；金标 92 PASS；check_docs 阻断 0 提醒 0。

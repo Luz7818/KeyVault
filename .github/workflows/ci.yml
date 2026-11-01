@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    # DPAPI 绑定 Windows——unittest 全量与金标都必须在 Windows 上跑才有意义
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 全量 unittest（stdin/stdout 无控制台的 runner 上 skip 数可能不同）
+        run: python -I -m unittest discover -s tests -t .
+      - name: 金标自测（runner 无 vault，闸门记录按设计跳过）
+        run: python kv.py selftest --golden
