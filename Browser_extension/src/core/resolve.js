@@ -23,6 +23,13 @@ import { CorrectionSet } from "./corrections.js";
 
 const CONFIDENCE_BY_STAGE = { hostname: "exact", keyname: "high", shape: "medium", window: "high" };
 
+// 对齐桌面版 Verdict.trusted：诚实的不确定（ambiguous/medium）也算可信落盘。
+const TRUSTED = new Set(["manual", "exact", "high", "medium", "ambiguous"]);
+
+export function isTrusted(v) {
+  return TRUSTED.has(v.confidence);
+}
+
 /** 形态阶段命中了但不能定论：先搁着，让标题有机会救回来。 */
 class Deferred {
   constructor(verdict) {
