@@ -842,3 +842,37 @@ sp(18) 滑入的同时旧页向左微退 sp(8)，新页左缘露出的条带是�
 - 发布产物：`packaging/build.bat` 重建 dist 三件（kv.exe / kv-cli.exe /
   kv-host.exe），`verify.py` 六查全过。
 - 门禁：全量两遍 `Ran 659, OK`；金标 92 PASS；check_docs 零阻断。
+
+## 2026-11-03 · Browser_extension 独立浏览器插件版（五批，v0.3.0）
+
+- **定位**：`Browser_extension/` = **独立自包含**的浏览器插件版（用户点名重开发）——
+  无桌面软件、无 Python 宿主；与 `extension/`（桌面伴侣版，native messaging 连
+  本机 vault）定位不同、共存。已拍板：主密码 + 自动锁定（PBKDF2-SHA256 600k →
+  AES-GCM-256，派生密钥只存 chrome.storage.session）；v1 全功能（核心捕获/管理 +
+  TOTP + 轮换/去重/批量导入 + 备份/审计/仪表盘）；与桌面 vault 完全独立。
+- **批1 检测大脑**（`src/core/`，1:1 移植 `kv/detect` + `kv/parse`）：24 条规则
+  表与歧义推导、22 类占位符闸门（连接串豁免顺序陷阱保真）、六解析器 + pipeline
+  去重、七级判定（needs_context 拒绝猜测 / context 弱证据 / 标题形态收窄）、掩码
+  三态、纠正规则五类。**差分 parity：同批 21 候选过 Python 原版与 JS 移植，判定
+  逐一相同**；sha256（同步，仅检测去重用）与 node:crypto 对拍。
+- **批2 vault 层**（`src/vault/`）：crypto（WebCrypto，派生密钥走会话内存，
+  keyStore 注入可测）、db.js（IndexedDB）与 memory-backend.js（同一接口的测试
+  替身）、store.js（saveops 语义：去重合并/命名冲突/rotate 旧指纹 revoked/
+  审计 hash 串链 + 伪造检出/importText/过期/统计/备份 KVBE1 口令独立）、
+  totp.js（RFC 6238）。修出三个移植真 bug：nextSecretId 不自增覆盖记录、
+  fpPut 缺更新语义、parseSeed 误用 base64 atob（应 RFC 4648 base32）。
+- **批3 扩展骨架**：manifest（clipboardWrite/alarms/offscreen/storage）、SW
+  （无状态设计：[存入] 回传原文重新检测——MV3 SW 可回收；自动锁定；TTL 擦除
+  经 offscreen，页面 copy 事件 = 剪贴板已换新 → 取消在飞擦除，桌面指纹语义的
+  浏览器等价；promptable = trusted 且平台非 unknown，ambiguous 诚实落点也给
+  存入出路——浏览器无桌面审批队列）、content.js（Shadow DOM 提示条）、popup
+  三态（设主密码/解锁/搜索复制）。
+- **批4 options 管理页**：仪表盘、密钥表格 + 详情抽屉（TOTP 活码倒计时/指纹
+  历史/轮换/吊销/重命名/设平台+记住纠正/删除）、审计列表（链完整性标示）、
+  批量导入、加密备份导出/恢复、设置（自动锁定/捕获开关/忽略站点/清库）。
+  全 textContent，无 innerHTML。
+- 测试与门禁：node --test 61 条全绿（`npm test`）；全部 JS node --check；
+  主仓 659 条 Python 门禁不受影响（独立目录，无 Python）；check_docs 零阻断
+  （README 四段 + 子目录节 + 目录说明三处 + 根 README 能力表 + extension/README
+  互相指引）。真机走查步骤在 Browser_extension/README（浏览器内行为 = 手动
+  三步，与上一扩展版同口径——自动化通道不支持加载未打包扩展）。
