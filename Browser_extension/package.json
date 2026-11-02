@@ -1,0 +1,10 @@
+{
+  "name": "keyvault-browser-extension",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "KeyVault 独立浏览器插件版（MV3，无构建步骤）",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\""
+  }
+}
