@@ -18,6 +18,8 @@
 | `src/vault/*` | vault 层：PBKDF2+AES-GCM 加密、IndexedDB 后端（db.js）与内存后端（memory-backend.js，同一接口）、SecretRepo（去重/轮换/审计链/备份 KVBE1） |
 | `tests/*.test.js` | node:test 单测 61 条（含 RFC 6238 官方向量、sha256 与 node:crypto 对拍） |
 | `icons/icon.png` | 图标（与 packaging/icon.png 同源） |
+| `make_release.py` | 打发布包：运行时文件 → `dist/keyvault-browser-extension-v<版本>.zip`（商店上传件） |
+| `PUBLISHING.md` | 发布指南：Chrome Web Store / Edge 加载项 / GitHub Release 三渠道材料与步骤 |
 
 ## 子目录
 
