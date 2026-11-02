@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon.png" alt="" width="18" height="18">
+    <h1>KeyVault</h1>
+    <span id="status-dot" class="dot" title=""></span>
+    <button id="lock-btn" class="ghost hidden" title="立即锁定">锁定</button>
+  </header>
+  <div id="gate" class="gate hidden">
+    <div id="gate-title" class="gate-title"></div>
+    <input id="gate-password" type="password" placeholder="主密码（至少 8 位）">
+    <div id="gate-error" class="gate-error"></div>
+    <button id="gate-submit" class="primary"></button>
+    <div class="gate-hint">加密数据只存本机浏览器；主密码不设恢复——忘了就是忘了。</div>
+  </div>
+  <div id="main" class="hidden">
+    <input id="search" type="search" placeholder="搜索名称 / 平台 / 备注">
+    <ul id="rows"></ul>
+    <div id="empty" class="empty hidden"></div>
+  </div>
+  <footer id="hint">点击条目复制，30 秒后自动擦除</footer>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
