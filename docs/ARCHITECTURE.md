@@ -27,7 +27,7 @@ KeyVault/
 |---|---|
 | `kv.py` | CLI 入口。直接 `python -m kv` 会因 cp936 踩编码坑，一律走这个 shim |
 | `kv_gui.py` | GUI 入口 shim |
-| `kv/__init__.py` | 版本号 `0.2.0`、`SCHEMA_VERSION=1`、`PROGRAM="kv"` 的常量单源 |
+| `kv/__init__.py` | 版本号常量（单源，升版只改这里）、`SCHEMA_VERSION=1`、`PROGRAM="kv"` 的常量单源 |
 
 打包链路（`packaging/build.bat` + `packaging/kv.spec`）与测试入口（`tests/runtests.py`）
 的职责见各自目录的 README。
