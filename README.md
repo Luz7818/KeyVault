@@ -34,7 +34,7 @@ vault 默认建在 `%LOCALAPPDATA%\KeyVault\`，不在当前目录；可用 `--v
 | 剪贴板捕获 | `kv copy` / `kv watch` | [kv/capture/](kv/capture/) |
 | 两步验证码 | `kv totp <名称>`（值是 base32 种子即可，GUI 右键菜单同款活码窗） | [kv/ops/totp.py](kv/ops/totp.py)、[kv/gui/totp_window.py](kv/gui/totp_window.py) |
 | 浏览器捕获 | 网页复制的 key 自动检测入队（高置信页内一键存入）；`kv host install` 注册扩展宿主 | [extension/](extension/)、[kv/host/](kv/host/) |
-| 独立浏览器版 | 无需桌面软件：主密码 + WebCrypto 的浏览器内保管箱，捕获/管理/TOTP/备份全功能 | [Browser_extension/](Browser_extension/) |
+| 独立浏览器版 | 无需桌面软件：网页复制的密钥页内检测一键存入，浏览器内保管箱（主密码 + AES-GCM 加密、自动锁定、审计链），管理/TOTP/泄露扫描/KVBE1 备份全功能，数据不出本机 | [Browser_extension/](Browser_extension/) |
 | 密钥轮换 | `kv rotate` / `kv revoke` | [kv/ops/rotate.py](kv/ops/rotate.py) |
 | 批量摄入 | `kv import` / `kv use` | [kv/ops/importer.py](kv/ops/importer.py) |
 | 审计溯源 | `kv audit` | [kv/core/audit.py](kv/core/audit.py) |

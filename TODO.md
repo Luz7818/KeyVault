@@ -5,8 +5,9 @@
 
 ## 当前进度
 
-- 正在做：无——Browser_extension 独立浏览器插件版已收口（2026-11-03 五批提交，node 61 全绿，主仓 659 无回归）
-- 下一个：两个扩展的真机手动走查（Browser_extension/README 与 GET-START §4.8）→ 推送 + Release（待确认）
+- 正在做：两个扩展的真机手动走查——Browser_extension v2 按 `Browser_extension/README.md`
+  「真机走查（待办）」十步（**尚未执行**），extension/ 桌面伴侣版按 GET-START §4.8
+- 下一个：推送 + Release（待确认）；桌面端版本同步仍按旧约定，发布时一起升
 
 ## 任务计划
 
@@ -18,6 +19,7 @@
 
 ## 完成记录
 
+- [x] Browser_extension v2 全新重写（用户决策推倒重来；v1.0.0：检测大脑与桌面逐字节同源 + WebCrypto vault + 八区管理页 + make_release 打包；npm test 504 条全绿、36 个 JS node --check 全过；真机走查待办）—— 2026-11-09
 - [x] Browser_extension 独立浏览器插件版（检测大脑 JS 移植 parity IDENTICAL / WebCrypto vault / 捕获提示条 / options 全功能管理页，node 61 全绿）—— 2026-11-03
 - [x] 浏览器扩展批（原生消息宿主 kv/host/ + MV3 扩展 extension/ + 打包六查）—— 2026-11-02
 - [x] v0.3.0 发布收口（版本升档、数字对账、dist 三件六查全过）—— 2026-11-02

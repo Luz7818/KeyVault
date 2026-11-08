@@ -132,3 +132,24 @@ Edge 各写一个 HKCU 注册表键（不提权，与 vault 的用户绑定同�
 不 import gui/cli/ctypes；第三个冻结 exe 在 spec 里独立 Analysis，
 `_wipe` 冻结分发由 `kv_host.py` shim 承接（与 `kv_gui.py` 成对，
 `spawn_helper` 不改）。
+
+## 独立浏览器版的扫描与备份决策（2026-11-09，随 Browser_extension v2 重写落地）
+
+`Browser_extension/`（独立浏览器插件版，与 `extension/` 桌面伴侣版并存）把检测
+大脑整体移植进 JS，两处刻意与桌面不同的架构决策：
+
+**网页版泄露扫描的输入形态**：桌面 `kv scan` 扫目录树（`os.walk` + 二进制/
+大小跳过 + 金标 gate）；浏览器拿不到文件系统，输入是调用方给定的
+`{name, content}[]`（options 页粘贴 / 文件 / 目录三种输入模式在应用层收集）。
+分批协议放在应用层（`planScanBatches` + 按行界切块），扫描引擎自身无跨批
+状态——引擎保持纯函数，单批上限按 chrome.runtime 消息通道安全量级取值。
+浏览器无运行时金标闸（桌面 scan gate 无等价物）：发布物内规则冻结，
+`npm test` 的金标对拍（直读 `tests/corpus/` 正本 92 条）是构建期门禁。
+
+**备份格式 KVBE1（与桌面 .kvb 不互通）**：桌面 `.kvb`（KVBK1）用 scrypt +
+HMAC + SHA256-CTR——浏览器 WebCrypto 没有 scrypt；浏览器版改用 WebCrypto
+原语：PBKDF2-SHA256(600k) 派生 AES-GCM-256 整包加密，格式
+`KVBE1|` + base64(salt|iv|ct)，口令独立于主密码、是唯一防线。两个格式
+`MAGIC` 不同、互不解析，恢复都走各自 vault 的正常入库（去重 + 审计链复用）。
+审计链哈希公式同理：两侧审计本不互通，各自自洽即可（camelCase 记录、
+字段序列化不同）。

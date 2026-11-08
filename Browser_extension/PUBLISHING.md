@@ -1,8 +1,20 @@
 # PUBLISHING —— 发布指南（Chrome Web Store / Edge 加载项 / GitHub Release）
 
-> 用途：让别人能在网上下载安装 KeyVault 浏览器扩展。三条渠道的材料与步骤都在这份文件，
-> 每次发版照着走。打包命令：`python Browser_extension/make_release.py`
-> → 产物 `dist/keyvault-browser-extension-v<版本>.zip`。
+> 用途：让别人能在网上下载安装 KeyVault 浏览器扩展。三条渠道的材料与步骤都在
+> 这份文件，每次发版照着走。打包命令：`python -I Browser_extension/make_release.py`
+> （仓根执行，`-I` 隔离模式）→ 产物 `dist/keyvault-browser-extension-v<版本>.zip`。
+> 2026-11-09 随 v2 重写更新：版本纪律、发版检查单、真机走查条数有变，渠道与
+> 商店材料基本沿旧。
+
+## 版本纪律（v2 起与桌面端解耦）
+
+- 扩展版本**单源 `manifest.json`**（`package.json` 仅镜像，`make_release.py`
+  校验两处一致，不一致拒绝打包）。
+- 扩展版本与桌面端（`kv/__init__.py` 单源）**各自独立推进**；桌面端版本在
+  桌面发布时按其旧约定统一升档——浏览器扩展发版**不需要**动 `kv/`。
+- 27 个运行时文件清单冻结在 `make_release.py`：src 增删文件必须同步清单，
+  否则发布物缺文件且检测静默失效——这是打包器硬拦的两种失败之一（另一种
+  是版本不一致）。
 
 ## 渠道一：Chrome Web Store（主渠道，Chrome + Edge 用户都能装）
 
@@ -16,7 +28,7 @@
 
 ### 上传步骤（每次发版）
 
-1. `python Browser_extension/make_release.py` 产出 zip。
+1. `python -I Browser_extension/make_release.py` 产出 zip。
 2. 开发者控制台 → **新增项目** → 上传 zip。
 3. 商店信息页：
    - 名称：`KeyVault - 本地密钥保管箱`
@@ -27,7 +39,7 @@
    - 单一用途说明：`KeyVault 是一个本地密钥保管箱：检测网页上复制的 API 密钥，
      在用户确认后加密存入浏览器本机数据库（IndexedDB），供用户随后搜索与复制。
      所有数据只保存在用户本机，不向任何服务器发送。`
-   - 权限理由（逐条）：
+   - 权限理由（逐条，v2 权限面不变）：
      - `storage`：保存解锁状态与扩展设置（不含密钥）。
      - `alarms`：定时器——无操作自动锁定与剪贴板到期自动擦除。
      - `clipboardWrite`：用户点复制后写入剪贴板；到期后覆盖擦除。
@@ -50,22 +62,27 @@
 
 ## 渠道三：GitHub Release（零门槛，源码+zip 都能发）
 
-1. 推送仓库（当前本地领先远端，待确认后执行）。
+1. 推送仓库。
 2. GitHub 仓库页 → Releases → Draft a new release：
-   - tag：`v0.3.0`；标题：`KeyVault v0.3.0 —— 独立浏览器插件版 + 浏览器扩展宿主`
-   - 附件：`dist/keyvault-browser-extension-v0.3.0.zip`
-     （桌面用户另附 `dist/kv.exe` / `dist/kv-cli.exe` / `dist/kv-host.exe`）
-   - 说明：指向 `Browser_extension/README.md` 的真机走查五步。
+   - tag：`v<扩展版本>`（当前 1.0.0 → `v1.0.0`）；标题写明独立浏览器插件版。
+   - 附件：`Browser_extension/dist/keyvault-browser-extension-v<版本>.zip`
+     （桌面用户另附 `dist/kv.exe` / `dist/kv-cli.exe` / `dist/kv-host.exe`，
+     版本随桌面端发布节奏，可能与扩展版本号不同）。
+   - 说明：指向 `Browser_extension/README.md` 的「真机走查」节（十步）。
 3. 没装商店的人：下载 zip 解压 → 开发者模式加载解压缩的扩展。
 
 ## 发版检查单（每次）
 
-- [ ] `kv/__init__.py` 与 `Browser_extension/manifest.json` 版本同步递增
-- [ ] `npm test`（Browser_extension 内）全绿；全部 JS `node --check` 通过
-- [ ] 主仓门禁：`python -I -m unittest discover -s tests -t .` + `python kv.py selftest --golden`
-- [ ] `python Browser_extension/make_release.py` 产出新 zip
-- [ ] 真机走查五步过一遍（Browser_extension/README）
+- [ ] `npm test`（Browser_extension 内，`node --test` 零依赖）全绿
+- [ ] 全部 36 个 JS `node --check` 通过
+- [ ] 主仓门禁不受影响：`python -I -m unittest discover -s tests -t .` +
+      `python kv.py selftest --golden`
+- [ ] `python -I Browser_extension/make_release.py` 产出新 zip
+      （27 文件清单校验 + 版本单源校验 + zip 条目回读校验，三关全过）
+- [ ] 真机走查十步过一遍（`Browser_extension/README.md`「真机走查」节）
 - [ ] 商店上传新版本号 zip（更新已上架项目，不用新建）
+- [ ] 扩展版本改的只是 `manifest.json`（`package.json` 镜像同步）；**不动 `kv/`**
+      ——桌面端版本在桌面发布时按旧约定一起升
 
 ## 商店详细描述（草稿，直接粘贴）
 
@@ -75,14 +92,15 @@ KeyVault 是一个**本地优先**的密钥保管箱：在网页上复制 API �
 
 功能：
 • 自动捕获：复制 API key 即检测（支持 OpenAI/DeepSeek/GitHub/AWS/Google/
-  GitLab/Slack/Vercel/npm/Stripe/Telegram 等 24 类平台形态），高置信候选
+  GitLab/Slack/Vercel/npm/Stripe/Telegram 等 24 类平台形态），可信候选
   弹出确认条，绝不悄悄入库
 • 加密保管：主密码（PBKDF2 60 万次派生）+ AES-GCM-256，数据只存本机浏览器，
-  不向任何服务器发送；15 分钟无操作自动锁定
+  不向任何服务器发送；无操作自动锁定（默认 15 分钟，可自定义）
 • 快速使用：popup 搜索 → 一键复制 → 30 秒后剪贴板自动擦除（期间复制新内容
   则取消擦除，绝不覆盖你的新东西）
 • 两步验证：值是 base32 种子的记录自动出现 TOTP 活码（RFC 6238，倒计时环）
 • 批量导入：粘贴 .env / JSON / curl / AWS csv 一次入库
+• 泄露扫描：粘贴文本或选文件/目录，用已存指纹在本机逐行比对，命中逐条报告
 • 轮换与审计：轮换保留历史指纹；append-only 审计链可查可验
 • 加密备份：口令加密的 KVBE1 备份文件导出/恢复
 
@@ -102,6 +120,7 @@ KeyVault 不收集、不传输、不出售任何数据。扩展处理的全部�
   点「存入」后，该值经主密码派生密钥（AES-GCM-256）加密存入本机 IndexedDB。
 - 主密码：不存储明文，仅存储 PBKDF2（60 万次迭代）派生的密钥校验器。
 - 剪贴板：写入由你主动点击触发；到期自动擦除在你本机完成。
+- 泄露扫描：指纹比对完全在你本机进行，任何文本不离开你的浏览器。
 - 卸载扩展或使用扩展内「删除全部数据」即彻底删除本机全部数据。
 
 联系：仓库 github.com/Luz7818/KeyVault 的 Issues。

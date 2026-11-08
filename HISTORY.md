@@ -877,3 +877,44 @@ sp(18) 滑入的同时旧页向左微退 sp(8)，新页左缘露出的条带是�
   （README 四段 + 子目录节 + 目录说明三处 + 根 README 能力表 + extension/README
   互相指引）。真机走查步骤在 Browser_extension/README（浏览器内行为 = 手动
   三步，与上一扩展版同口径——自动化通道不支持加载未打包扩展）。
+
+## 2026-11-09 · Browser_extension v2 全新重写（独立浏览器插件版 v1.0.0）
+
+- **缘由**：用户决策对 2026-11-03 五批首版**全新推倒重写**——首版遗留两处各自
+  组装检测链的漂移、整库清除零鉴权等结构性问题，修补不如重立契约。
+- **范围**：`Browser_extension/` 整树。定位不变：独立自包含的浏览器插件版
+  （无桌面软件、无 Python 宿主），与 `extension/`（桌面伴侣版）并存、vault 互不相通。
+  - 检测大脑 `src/core/`（8 文件）：24 条规则表与桌面 `kv/detect/rules.py`
+    **逐字节同源**（`tableHash()` 41e6c9afb20174f4 对拍），桌面金标语料 92 条由
+    `tests/golden.test.js` 直读 `tests/corpus/` 正本逐条对拍——语料单源无副本；
+    六解析器（curl/jsonblob/awscsv/dotenv/kvline/bare）+ genericScan 兜底 +
+    八级 resolve 判定（歧义候选不猜厂商）；识别 token/json/pem/pair/connstring。
+  - 加密存储 `src/vault/`（7 文件）：WebCrypto PBKDF2-SHA256 600 000 轮派生
+    AES-GCM-256；IndexedDB 单连接后端（node 测试走内存后端）；camelCase 记录、
+    审计哈希链（公式与桌面不同，两侧本不互通自洽即可）、指纹历史（16 位前缀）、
+    KVBE1 口令备份恢复、RFC 6238 TOTP（与桌面实跑值对拍）、分批泄露扫描引擎；
+    `detectText()` 是检测组合唯一入口。
+  - 编排与界面：`background.js`（MV3 SW）只做编排——C1 全表 30 个动作消息分发
+    （sender 门：capture/store/clipboard-changed 仅内容脚本）、捕获调度
+    （开关/忽略站点/恰一条可信候选弹条）、自动锁定 alarm、剪贴板 30 秒 TTL 擦除
+    （offscreen 无手势覆盖，clipboard-changed 取消、失败宁可不擦、启动 sweep 补擦）、
+    过期标记 sweep；候选绝不驻留 SW 内存，明文不入日志与 storage.session。
+    `content.js` 页内捕获（copy/cut 事件、isTrusted 防伪造、8–200 000 字符闸门、
+    20 条指纹去重环、Shadow DOM 提示条）；popup 三态门；options 八区管理页
+    （整库清除改走 reset 鉴权消息，UI 主密码 + RESET 双门）。
+  - 打包：`make_release.py`（stdlib only）——27 文件显式清单缺失即拒绝、版本
+    单源校验（manifest.json 单源，package.json 镜像）、zip 条目回读校验。
+- **版本**：扩展版 **1.0.0**，单源 `Browser_extension/manifest.json`
+  （`package.json` 仅镜像）——与桌面端 `kv/__init__.py` 的 0.3.0 **各自独立**，
+  桌面端版本发布时一起同步（旧版约定如此，本次未动 kv/）。
+- **门禁**（2026-11-09 实测）：`npm test`（node --test）16 个测试文件
+  **504 条全绿**（tests 504 / pass 504 / fail 0 / skipped 0）；`node --check`
+  全部 **36 个 JS**（顶层 5 + src 15 + tests 16）通过。主仓 659 条 Python
+  门禁不受影响（本目录无 Python）。
+- **待办**：真机手动走查（步骤在 `Browser_extension/README.md`「真机走查」节）
+  尚未执行——IndexedDB / chrome.* / offscreen / Shadow DOM 的运行时行为
+  node 测试覆盖不到，与桌面伴侣版走查同批进行。
+- **配套**：`Browser_extension/README.md` 板块说明整篇重写（定位/清单/功能表/
+  真机走查十步/门禁/加密边界与设计红线）；`Browser_extension/PUBLISHING.md`
+  随发布流程变化重写（打包命令加 `-I`、版本纪律与桌面端解耦、检查单对齐
+  新门禁与十步走查、商店描述补泄露扫描）。

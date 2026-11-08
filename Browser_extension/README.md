@@ -1,64 +1,174 @@
-# Browser_extension/ —— KeyVault 独立浏览器插件版（Chrome/Edge，MV3）
+# Browser_extension/ —— 浏览器扩展（Chrome，MV3，独立浏览器版）
 
-> 用途：**不依赖桌面软件**的完整浏览器内保管箱。网页复制的 key 自动检测、像保存
-> 密码一样确认入库；主密码 + WebCrypto 加密，数据只存本机浏览器配置文件。
-> 与 `extension/`（桌面伴侣版，连 Python 宿主）定位不同、互不依赖，二者共存。
+> 用途：KeyVault 的**独立浏览器版**——本地密钥保管箱整个跑在浏览器里，不需要
+> 桌面软件、不需要 Python、不需要宿主进程：网页复制的密钥页内检测、一键存入
+> 浏览器内加密 vault，管理/TOTP/泄露扫描/备份恢复全功能。零 npm 依赖、零遥测，
+> 数据不出本机。
+> 连接本机桌面 vault 的**桌面伴侣版**在 [`extension/`](../extension/)——两版
+> 定位不同、并存；各自 vault 完全独立。
+
+## 定位
+
+- 给不方便装桌面软件、但需要「网页上撞见密钥就收进保险箱」的场景。
+- 检测大脑（规则/解析/判定）是桌面 `kv/detect` + `kv/parse` 的 JS 移植：
+  24 条规则表与桌面**逐字节同源**（`tableHash()` 对拍），桌面金标语料 92 条
+  由 `tests/golden.test.js` 直读 `tests/corpus/` 正本逐条对拍——语料单源无副本。
+- 版本单源 `manifest.json`（`package.json` 仅镜像，`make_release.py` 校验一致）。
 
 ## 文件清单
 
+运行时 27 个文件在 [`make_release.py`](make_release.py) 显式列出，缺一即拒绝
+打包；清单外全是开发期文件。
+
 | 文件 | 干什么 |
 |---|---|
-| `manifest.json` | MV3 清单：clipboardWrite/alarms/offscreen/storage + `<all_urls>` 内容脚本 + popup + options |
-| `background.js` | service worker：消息面（status/setup/unlock/lock/capture/store/list/get/reveal/totp/copy 流/rotate/revoke/delete/rename/set-platform/corrections/import-text/stats/audit/备份/设置）+ 检测引擎调度 + 自动锁定 + TTL 擦除 |
-| `content.js` | 内容脚本：copy/cut 捕获 → SW 检测 → 高置信候选弹页内提示条（Shadow DOM）；每次复制顺带发「剪贴板已换新」取消在飞擦除 |
-| `popup.html/css/js` | 工具栏弹窗三态：设主密码 → 解锁 → 搜索 + 一键复制（30 秒自动擦除） |
-| `options.html/css/js` | 全功能管理页：仪表盘、密钥表格、详情抽屉（TOTP 活码/轮换/吊销/重命名/设平台）、审计日志、批量导入、加密备份导出/恢复、设置（自动锁定/捕获开关/忽略站点/清库） |
-| `offscreen.html/js` | offscreen 页：TTL 到期覆盖剪贴板（clipboardWrite，无手势） |
-| `src/core/*` | 检测大脑（纯逻辑，node 可测）：规则表 24 条、占位符闸门、六解析器、七级判定、掩码、TOTP、纠正规则、同步 sha256 |
-| `src/vault/*` | vault 层：PBKDF2+AES-GCM 加密、IndexedDB 后端（db.js）与内存后端（memory-backend.js，同一接口）、SecretRepo（去重/轮换/审计链/备份 KVBE1） |
-| `tests/*.test.js` | node:test 单测 61 条（含 RFC 6238 官方向量、sha256 与 node:crypto 对拍） |
-| `icons/icon.png` | 图标（与 packaging/icon.png 同源） |
-| `make_release.py` | 打发布包：运行时文件 → `dist/keyvault-browser-extension-v<版本>.zip`（商店上传件） |
-| `PUBLISHING.md` | 发布指南：Chrome Web Store / Edge 加载项 / GitHub Release 三渠道材料与步骤 |
+| `manifest.json` | MV3 清单：权限恰为 storage/alarms/clipboardWrite/offscreen（绝不加 clipboardRead），`minimum_chrome_version` 116 |
+| `background.js` | MV3 service worker，**只做编排**（无一行检测/加密/存储逻辑） |
+| `content.js` | 内容脚本：copy/cut 事件驱动页内捕获（无 clipboardRead） |
+| `popup.html` / `popup.css` / `popup.js` | 工具栏弹窗：三态门（设主密码 / 解锁 / 搜索取用） |
+| `options.html` / `options.css` / `options.js` | 管理页（整页打开）：八区全功能 |
+| `offscreen.html` / `offscreen.js` | offscreen 文档：30 秒 TTL 剪贴板擦除 |
+| `icons/icon.png` | 扩展图标（与 `packaging/icon.png` 同源整包复用） |
+| `make_release.py` | 零依赖打包脚本（stdlib only，见下「门禁」） |
+| `package.json` | `npm test` 入口（`node --test`）；零依赖、版本镜像 |
+| `src/` `tests/` | 源码与测试（见下） |
+| `dist/` | 打包产物（zip），不入库 |
+
+### src/core —— 检测大脑（8 文件，桌面 kv/detect + kv/parse 的移植）
+
+| 文件 | 负责 |
+|---|---|
+| `rules.js` | 24 条平台规则表（纯数据）：与桌面逐字节同源，`tableHash()` 对拍；歧义组（裸 sk- 共用形态） |
+| `placeholders.js` | 占位符/非机密闸门：18 条占位符模式（与桌面 `kv/parse/placeholders.py` 同源）+ 哈希形态/锁文件白名单，连接串豁免先于 URL 规则 |
+| `candidate.js` | 候选构造与主机名/键名提取 |
+| `masking.js` | 掩码样式（`[keepHead, keepTail]` + `*` 预览）、canonicalize、kind 枚举（token/json/pem/pair/connstring） |
+| `parse.js` | 六解析器（curl / jsonblob / awscsv / dotenv / kvline / bare）+ `genericScan` 兜底（全部落空才跑） |
+| `resolve.js` | 八级判定（0 用户纠正 → 7 无信号）：歧义候选拒绝猜测，绝不猜厂商 |
+| `corrections.js` | 用户纠正规则五类（存后可纠正平台） |
+| `sha256.js` | 同步 sha256（仅检测去重用，与 node:crypto 对拍过） |
+
+### src/vault —— 加密存储层（7 文件）
+
+| 文件 | 负责 |
+|---|---|
+| `crypto.js` | WebCrypto：PBKDF2-SHA256 600 000 轮派生 AES-GCM-256；Session（锁定 = 删密钥） |
+| `db.js` | IndexedDB 后端（单连接、库名 keyvault、DB_VERSION 1） |
+| `memory-backend.js` | 同一接口的内存后端（node 测试替身；node 无 indexedDB，真机行为靠浏览器走查） |
+| `store.js` | vault 门面：指纹去重、rotate 旧指纹保留、审计哈希链、指纹历史、KVBE1 口令备份恢复、批量导入、过期标记、统计 |
+| `scan.js` | 泄露扫描引擎（桌面 `kv/ops/scan.py` 等价）：逐行子串匹配、分批协议无跨批状态 |
+| `detect.js` | `detectText()`——检测组合**唯一**入口（capture/store/import 一律经此） |
+| `totp.js` | RFC 6238（与桌面 `kv/ops/totp.py` 实跑值对拍） |
+
+记录字段全 camelCase；审计链公式与桌面不同（两侧审计本不互通，自洽即可）。
 
 ## 子目录
 
 | 子目录 | 负责 |
 |---|---|
-| `src/core/` | 检测大脑纯逻辑（规则/解析/判定/掩码/TOTP/纠正），node 可直接测 |
-| `src/vault/` | 加密、存储后端（IndexedDB + 内存替身）、SecretRepo |
-| `tests/` | node:test 单测（`npm test`） |
-| `icons/` | 图标位图 |
+| `icons/` | 扩展图标位图（manifest 按 16/48/128 引用同一文件，浏览器自缩放） |
+| `src/` | 源码：`core/`（检测大脑）+ `vault/`（加密存储），逐文件见上表 |
+| `tests/` | node:test 测试 16 文件（含金标对拍 `golden.test.js`） |
+
+`dist/` 是打包产物目录，不入库。
+
+## 功能表
+
+| 能力 | 在哪 | 说明 |
+|---|---|---|
+| 页内捕获 | `content.js` → `background.js` | copy/cut 事件（`isTrusted` 防伪造）→ 8–200 000 字符送检 → 恰一条可信候选弹 Shadow DOM 提示条（20 条内容指纹去重环）；存入走重新检测去重 |
+| 捕获调度 | `background.js` | 捕获开关、忽略站点；候选绝不驻留 SW 内存（SW 无状态，入库前拿原文重新检测） |
+| 搜索取用 | `popup.js` | 150ms 防抖搜索 → 掩码列表 → 点击复制；复制即安排 30 秒擦除 |
+| 管理页 | `options.js`（八区） | ①仪表盘（统计与平台分布）②密钥表格 ③详情抽屉（TOTP 活码环、指纹历史、轮换/吊销/重命名/设平台/纠正规则）④审计日志（整链复算）⑤批量导入（不可信候选进 skipped 不落盘）⑥KVBE1 备份导出恢复 ⑦设置（自动锁定封顶 240 分钟、捕获开关、忽略站点、整库清除）⑧泄露扫描 |
+| 泄露扫描 | `options.js` + `scan.js` | 粘贴 / 文件 / 目录三种输入；行界切块 + 贪心分批 + 逐批发送，失败逐条明示；吊销的旧值同样参与匹配 |
+| 剪贴板擦除 | `background.js` + `offscreen.js` | 复制后 30 秒 TTL 到点覆盖剪贴板；页面再次复制即取消（clipboard-changed）；擦除失败宁可不擦不错擦，启动 sweep 补擦 |
+| 两步验证码 | `src/vault/totp.js` | 详情抽屉「显示验证码」显式 reveal，活码每秒重绘、剩 5s 转琥珀 |
+| 自动锁定 | `background.js` | 每分钟 alarm 检查最近交互，超时锁定；解锁时补过期标记 sweep |
+
+## 门禁
+
+```bash
+cd Browser_extension
+npm test          # node --test，零依赖
+```
+
+- 2026-11-09 实测：**16 个测试文件 504 条全绿**（tests 504 / pass 504 / fail 0）。
+- `node --check` 全部 36 个 JS（顶层 5 + src 15 + tests 16）语法通过。
+- 金标：`tests/golden.test.js` 直读 `tests/corpus/` 桌面正本 92 条逐条对拍——
+  桌面语料任何改动，浏览器侧测试立刻同响。
+- 机械红线有测试钉死：全部 `textContent` 无 `innerHTML`（app-content /
+  app-options / app-popup）、禁词表（app-background、app-popup）、
+  `package.json` 零依赖（app-package）。
+- 打包：`python -I Browser_extension/make_release.py`（仓根执行）——27 文件
+  清单缺失即拒绝、版本单源校验（manifest ↔ package.json）、zip 条目回读校验。
+
+主仓 Python 门禁（`python -I -m unittest discover -s tests -t .`）不受本目录影响：
+本目录没有 Python，`golden.test.js` 只是读语料正本。
+
+## 真机走查（待办）
+
+node 测试覆盖不到浏览器运行时（IndexedDB、chrome.*、offscreen、Shadow DOM），
+加载后手动过一遍——**尚未执行**，步骤：
+
+1. `chrome://extensions` 开发者模式 →「加载已解压的扩展程序」选本目录。
+2. 工具栏点开 popup → 设主密码（≥8 位）→ 确认三态门切到搜索态。
+3. 打开 options（扩展详情 → 扩展程序选项）：仪表盘统计与平台分布应显示零起点。
+4. 在任一网页复制一段含密钥的文本（如 `sk-` 开头假串）→ 页内应弹提示条 →
+   「存入」→ popup 搜索可见；再复制同文本不重复弹条（去重环）。
+5. 详情抽屉：设平台、看指纹历史、TOTP（值存 base32 种子）出活码、轮换后旧值进指纹历史。
+6. 复制一个密钥 → 等 30 秒 → 手动粘贴确认剪贴板已被覆盖；期间在网页再复制
+   任意内容 → 到点不擦（clipboard-changed 取消）。
+7. 设置区：改自动锁定分钟数 → 等待锁定 → 解锁；忽略站点列表生效（该站复制不弹条）。
+8. 备份导出 → 清库（主密码 + RESET 双门）→ 恢复 → 数据与审计链完整。
+9. 泄露扫描：粘贴含已存密钥的文本 → 命中报告；拖一个含假密钥的目录扫描。
+10. 批量导入一段混合文本 → 确认可信候选入库、低置信进 skipped 明示。
+
+## 加密边界与设计红线
+
+- **加密**：PBKDF2-SHA256 600 000 轮（盐 16B）派生 AES-GCM-256；派生密钥只存
+  `chrome.storage.session`（浏览器会话结束即清空，锁定 = 删除）；vault 全库
+  IndexedDB，锁定态整库冻结（写操作先 `assertUnlocked`）。
+- **备份**：KVBE1 = `KVBE1|` + base64(salt|iv|ct)，口令独立于主密码派生、
+  是唯一防线；恢复走正常入库（去重 + 审计链复用），不重新检测。
+- **明文边界**：明文只在解密瞬间存在于内存；不进日志、不进 `storage.session`
+  （那里只有 raw key 的 b64、活动时间戳与擦除元数据）；候选绝不驻留 SW 内存。
+- **剪贴板诚实声明**：浏览器的 `navigator.clipboard` 没有「排除系统剪贴板
+  历史」的 API（桌面 `kv copy` 的 exclude_history 无等价物）——popup 文案
+  明示「无法排除系统剪贴板历史」，不宣称等同桌面安全级。
+- **权限最小化**：不加 `clipboardRead`（copy/cut 事件里拿到的是用户主动复制
+  的内容）；`<all_urls>` 是捕获所必需。
+- **DOM 纪律**：页面与管理页一律 `textContent`，绝不 `innerHTML`（用户数据
+  转义面）；页内提示条挂在 Shadow DOM。
+- **检测纪律**：`detectText()` 是唯一组合入口；歧义候选不猜厂商——unknown
+  拒绝落盘，ambiguous 显示「厂商未定」、存后可纠正。
+- **版本纪律**：版本单源 `manifest.json`，`package.json` 仅镜像；扩展版本
+  独立推进，桌面端版本按其单源 `kv/__init__.py` 在桌面发布时同步（发版指南
+  见 [PUBLISHING.md](PUBLISHING.md)）。
 
 ## 和谁打交道
 
-- **宿主环境**：Chrome/Edge（Chromium MV3）；加载方式见下方「真机走查」。
-- **桌面版**：完全独立，无 native messaging、无 Python。备份格式 KVBE1 是
-  浏览器版自有格式（与桌面 .kvb 同理念、不互通）。
-- **改这里之后要跑**：`npm test`（本目录内，node --test）+ 全部 JS `node --check`；
-  Python 侧门禁不受本目录影响，但动了一级目录登记要跑
-  `python 文档标准/check_docs.py KeyVault`。
-
-## 真机走查（首次安装约 2 分钟）
-
-1. `chrome://extensions` 开发者模式 → 加载解压缩的扩展 → 选本目录；
-   同样方式可装进 Edge（edge://extensions）。
-2. 点工具栏 KeyVault 图标 → 设置主密码（≥8 位，创建本机保管箱）。
-3. 打开任意网页，复制一段真 API key（或在文本框选中复制）→ 页面右下角浮出
-   「检测到 API Key」提示条 → 点「存入 KeyVault」→ 状态栏显示记录名。
-   低置信/歧义候选不打扰页面（歧义裸 sk- 会以「厂商未定」提示，可存后改）。
-4. popup 搜索 → 点击复制 → 30 秒后剪贴板被自动覆盖；期间再复制别的内容则取消擦除。
-5. options 页：详情抽屉看 TOTP 活码（记录值是 base32 种子时自动出现）、
-   轮换/吊销/重命名；批量导入粘贴 .env；导出加密备份再恢复验证。
+- **上游单源（只读）**：`tests/corpus/` 的桌面金标语料正本——`golden.test.js`
+  直读对拍，桌面语料改动本侧立刻同响；规则表以桌面 `kv/detect/rules.py` 为
+  正本（`tableHash()` 对拍），本侧不许单方面改规则。
+- **浏览器运行时**：Chrome 116+ 的 MV3 API（service worker / IndexedDB /
+  offscreen / alarms / storage.session）；不连任何宿主进程、不连桌面 vault。
+- **改这里之后要跑**：`npm test`（本目录）+ 36 个 JS `node --check` +
+  `python -I Browser_extension/make_release.py`（打发布包）；主仓 Python
+  门禁不受影响；发布前按上文「真机走查」节在浏览器里手动过一遍。
 
 ## 别动
 
-- **加密边界**：明文值只在 `reveal` 返回值与内存里存在，落库一律经
-  `crypto.js` AES-GCM；不要为了调试把明文写进 IndexedDB 或日志。
-- **SW 无状态**：候选不驻留 SW 内存（MV3 随时回收）——[存入] 重发原文重新
-  检测是设计不是浪费；换长连接前先想清楚 SW 生命周期。
-- **检测语义**：`src/core` 是桌面 `kv/detect`+`kv/parse` 的忠实移植，改动
-  任何正则/分级顺序必须同步跑 `npm test`，并考虑与桌面端行为漂移。
-- `src/vault/db.js` 与 `memory-backend.js` 是同一接口的两个实现——改接口
-  两个都要改（tests 只测内存版，IndexedDB 版靠真机走查）。
-- 版本号与 `kv/__init__.py` 同步升（发布时一起改）。
+- `manifest.json` 的 `permissions` 恰为 storage/alarms/clipboardWrite/offscreen
+  四项——**绝不加 `clipboardRead`**（copy/cut 事件已足够，只写不读是隐私边界）；
+  加任何权限都要先说清理由。
+- `src/core/rules.js` 的规则表与桌面逐字节同源：改规则先改桌面正本并重对
+  `tableHash()`，不许只动 JS 侧（否则金标对拍立刻红，那是对的）。
+- 一切 DOM 输出保持 `textContent`，不要换成 `innerHTML`（用户数据转义面，
+  有测试钉死）；页内提示条留在 Shadow DOM。
+- `background.js` 不写检测/加密/存储逻辑，检测一律走 `detect.js` 的
+  `detectText()` 唯一入口——另起炉灶组装 parse/resolve 是首版翻过的车。
+- SW 无状态是刻意的（MV3 随时被回收）：候选不驻留内存、入库走原文重新检测，
+  别加「缓存候选」类的优化。
+- 擦除失败「宁可不擦不错擦」的语义别改；`COPY_NOTICE` 的「无法排除系统剪贴板
+  历史」声明不得删（诚实红线）。
+- `package.json` 保持零依赖（有测试钉死）；`make_release.py` 的 27 文件清单
+  是发布物语义，src 增删文件必须同步清单再打包。
