@@ -1,59 +1,361 @@
-/* KeyVault 独立版 popup：深墨蓝头 + 白纸列表，与桌面端同一设计语言 */
-:root { color-scheme: light; }
-* { box-sizing: border-box; }
+/* KeyVault 工具栏弹窗样式（app-popup 独占）。
+ *
+ * 配色单源：:root 一套 CSS 变量 + prefers-color-scheme 暗色覆盖，
+ * 弹窗跟随浏览器明暗（html 上另有 <meta name="color-scheme"> 让原生控件同步）。
+ * 布局原则：380px 窄栏三段式 —— 品牌行（状态灯 + 锁定钮）→ 当前视图 → 页脚；
+ * 复制反馈用底部提示条，成功/失败只换边框与文字色，不弹窗。
+ */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f5f6f8;
+  --elev: #ffffff;
+  --fg: #1c2128;
+  --fg-muted: #667085;
+  --border: #d9dee5;
+  --accent: #2f6fed;
+  --accent-hover: #245cd4;
+  --ring: rgba(47, 111, 237, 0.22);
+  --ok: #1a9a5c;
+  --warn: #b7791f;
+  --danger: #d64545;
+  --row-hover: #eef1f6;
+  --shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151a;
+    --elev: #1a1f27;
+    --fg: #e7eaf0;
+    --fg-muted: #98a2b3;
+    --border: #2a313c;
+    --accent: #5b8df0;
+    --accent-hover: #6f9cf2;
+    --ring: rgba(91, 141, 240, 0.28);
+    --ok: #3fbf7f;
+    --warn: #d9a441;
+    --danger: #e5635f;
+    --row-hover: #232a34;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
 body {
-  width: 330px; margin: 0;
-  font: 13px/1.5 "Microsoft YaHei UI", "Segoe UI", sans-serif;
-  color: #1c2230; background: #ffffff;
+  width: 380px;
+  margin: 0;
+  padding: 0 14px 12px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13.5px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
 }
-header {
-  display: flex; align-items: center; gap: 8px;
-  background: linear-gradient(180deg, #10141d, #1b2233);
-  padding: 10px 14px;
-}
-header h1 { margin: 0; font-size: 14px; color: #ffffff; font-weight: 600; flex: 1; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7488; display: inline-block; }
-.dot.ok { background: #34d399; }
-.dot.bad { background: #f87171; }
-.ghost {
-  background: transparent; border: 1px solid #3d4a63; color: #9aa4b8;
-  border-radius: 6px; font: inherit; font-size: 11.5px; padding: 2px 8px; cursor: pointer;
-}
-.ghost:hover { color: #d4dcec; }
-.hidden { display: none; }
 
-.gate { padding: 16px 18px 12px; }
-.gate-title { font-weight: 600; margin-bottom: 10px; }
-.gate input {
-  width: 100%; padding: 8px 10px; font: inherit;
-  border: 1px solid #d4d9e4; border-radius: 8px; outline: none; box-sizing: border-box;
-}
-.gate input:focus { border-color: #3d5fe8; }
-.gate-error { color: #d92d20; font-size: 12px; min-height: 18px; padding-top: 4px; }
-.gate .primary {
-  width: 100%; padding: 8px 0; border-radius: 8px; border: 1px solid #2743b8;
-  background: #3d5fe8; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
-}
-.gate .primary:hover { background: #2f4fd6; }
-.gate-hint { color: #9aa3b5; font-size: 11.5px; margin-top: 8px; }
+/* ---- 品牌行：状态灯三色（未初始化=琥珀 / 已锁定=红 / 已解锁=绿） ---- */
 
-#main input#search {
-  display: block; width: calc(100% - 20px); margin: 10px auto 6px;
-  padding: 7px 10px; font: inherit;
-  border: 1px solid #d4d9e4; border-radius: 8px; outline: none;
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
-#main input#search:focus { border-color: #3d5fe8; }
-ul { list-style: none; margin: 0; padding: 2px 0 6px; max-height: 300px; overflow-y: auto; }
-li { padding: 7px 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
-li:hover { background: #f2f4fb; }
-li .name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-li .preview { color: #9aa3b5; font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; }
-li .platform {
-  color: #3d5fe8; background: #e9eeff; border-radius: 6px;
-  font-size: 11px; padding: 1px 6px; flex: none;
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
-.empty { color: #9aa3b5; text-align: center; padding: 14px 0 18px; font-size: 12.5px; }
-footer {
-  border-top: 1px solid #e5e8f0; color: #5f6b81;
-  padding: 7px 14px; font-size: 12px;
+
+.brand-name {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+
+.status-text {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--fg-muted);
+}
+
+.dot-uninit {
+  background: var(--warn);
+}
+
+.dot-locked {
+  background: var(--danger);
+}
+
+.dot-ok {
+  background: var(--ok);
+}
+
+.lock-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--elev);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.lock-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---- 视图与表单 ---- */
+
+h1 {
+  margin: 2px 0 4px;
+  font-size: 15px;
+}
+
+.lede {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--fg-muted);
+}
+
+.field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+input[type="password"],
+input[type="search"] {
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input[type="password"]:focus-visible,
+input[type="search"]:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+#search {
+  margin-bottom: 8px;
+}
+
+button {
+  font: inherit;
+}
+
+.primary {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.primary:hover {
+  background: var(--accent-hover);
+}
+
+.primary:active {
+  transform: translateY(1px);
+}
+
+.error {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* ---- 掩码列表：整行为一个 button，键盘 Tab + Enter 即复制 ---- */
+
+.list-hint {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--fg-muted);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.rows::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rows::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.rows::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.row {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  text-align: left;
+  background: var(--elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.row:hover {
+  background: var(--row-hover);
+  border-color: var(--accent);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.row-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-preview {
+  display: block;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.row-meta {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.tag {
+  padding: 0 6px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+
+.tag-revoked {
+  color: var(--danger);
+}
+
+.tag-expired {
+  color: var(--warn);
+}
+
+.list-meta {
+  margin: 8px 2px 0;
+  font-size: 11.5px;
+  color: var(--fg-muted);
+}
+
+.list-empty {
+  padding: 18px 0 10px;
+  text-align: center;
+}
+
+/* ---- 页脚与复制提示条 ---- */
+
+.footer {
+  padding-top: 8px;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  text-align: right;
+}
+
+.notice {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--elev);
+  border: 1px solid var(--ok);
+  border-radius: 9px;
+  box-shadow: var(--shadow);
+  animation: notice-rise 0.18s ease-out;
+}
+
+.notice-error {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+@keyframes notice-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }

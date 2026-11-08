@@ -1,523 +1,1412 @@
-// KeyVault 独立版 options 管理页：三态门（未初始化/锁定/解锁）+ 五个分区
-// （仪表盘 / 密钥管理 / 审计 / 备份导入 / 设置）。全 textContent——vault 里的
-// 名称与备注是用户数据，绝不 innerHTML。
+// KeyVault 管理页（options）：八区全功能管理页——①仪表盘 ②密钥表格
+// ③详情抽屉（行点击唤起）④审计日志 ⑤批量导入 ⑥备份恢复 ⑦设置 ⑧泄露扫描。
+// 经 manifest 的 options_ui.open_in_tab 以整页打开。
+//
+// 与旧版（git 批4 options.js）的硬缺口修正：
+// - 整库清除不再动态 import ./src/vault/db.js 自删（旧版 497-504 零鉴权），
+//   改走 C1#30 reset 鉴权消息；UI 双门 = 主密码（鉴权门）+ 输入 RESET
+//   （二次确认门），缺一不可。真正的认证在 background 的 verifier 校验。
+// - TOTP 从新家 ./src/vault/totp.js 导入（旧 src/core/totp.js 归整合批删除）。
+//
+// 与桌面版的对位：详情字段与指纹历史（16 位前缀）对齐 kv/gui/detail_window.py:16-37
+// （「操作历史」节有意不移植——C1#8 get 契约无 history 字段，完整轨迹在④审计区，
+// 同 detail_window.py:36 的指向）；TOTP 活码是**显式入口**（「显示验证码」按钮点击
+// 才 reveal，对齐 open_totp_for_secret 的入口纪律「非种子记录不该为看看详情付一次
+// reveal」totp_window.py:83-84；活码每秒重绘、剩 5s 转琥珀、复制走剪贴板擦除通道）；
+// 扫描的跳过口径（头 8KB 二进制、50MB 上限）对齐 kv/ops/scan.py:19-29；kv config
+// 的 mask_char 显示偏好不移植（C9#8，掩码字符固定 *）。kv scan <目录> 的浏览器
+// 等价 = 三种输入（粘贴 / 文件 / 目录），目录遍历与 .git 剪枝由用户选择范围天然
+// 替代（C6）；分批协议在应用层（planScanBatches + chunkTextByLines），引擎无跨批状态。
+//
+// 全 textContent：vault 里的名称/备注/来源是用户数据，绝不 innerHTML。
+// 模块级只放纯逻辑与常量（含编排层：三态门 planGateState、导入/恢复/扫描结果
+// 文案、通道异常翻译——供 node 测试），DOM/chrome 全部收在函数里，boot() 由
+// document 探测守卫——node --test 直 import 本文件即可测（tests/app-options.test.js）。
 
-import { parseSeed, generate } from "./src/core/totp.js";
+import { PERIOD, parseSeed, generate } from "./src/vault/totp.js";
+import { MAX_TEXTS_PER_CALL, MAX_CONTENT_CHARS, MAX_TOTAL_CHARS } from "./src/vault/scan.js";
+import { suggestCorrectionScope } from "./src/core/corrections.js";
+import { hostsIn } from "./src/core/candidate.js";
 
-function send(kind, extra = {}) {
-  return chrome.runtime.sendMessage({ kind, ...extra });
+// ---------------------------------------------------------------- 常量（纯）
+
+const RESET_CONFIRM_PHRASE = "RESET";
+// kv/ops/scan.py:20 MAX_FILE_SIZE：50MB 以上跳过（日志/打包产物/数据库量级）
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+// kv/ops/scan.py:22 BINARY_CHECK_SIZE：头 8KB 探测 \x00
+const BINARY_CHECK_SIZE = 8192;
+// 扫描错误清单最多逐条列出 N 项，其余计数带过
+const SCAN_ERROR_LIST_CAP = 50;
+
+export const STATUS_LABEL = { active: "启用", revoked: "已吊销", expired: "已过期" };
+export const CONFIDENCE_LABEL = {
+  manual: "手动", exact: "精确", high: "高", medium: "中", ambiguous: "厂商未定", none: "无",
+};
+const CORRECTION_KIND_LABEL = {
+  exact: "精确值", keyname: "键名", hostname: "主机名", window: "窗口标题", group: "组默认",
+};
+const TAB_TITLES = {
+  dashboard: "仪表盘", secrets: "密钥", audit: "审计日志", import: "批量导入",
+  backup: "备份恢复", scan: "泄露扫描", settings: "设置",
+};
+
+// ---------------------------------------------------------------- 纯逻辑（可测）
+
+/** ISO 时间戳 → "YYYY-MM-DD HH:MM:SS"（对齐桌面 detail 的 [:19] 截断）。 */
+export function formatStamp(iso) {
+  return String(iso ?? "").slice(0, 19).replace("T", " ");
 }
 
-const $ = (id) => document.getElementById(id);
-const STATUS_LABEL = { active: "启用", revoked: "已吊销", expired: "已过期" };
+/** 标签输入 → 数组：中英文逗号/顿号/分号分隔，去空白。 */
+export function parseTagList(text) {
+  return String(text ?? "")
+    .split(/[,，、;；]+/)
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
 
-// ---------------------------------------------------------------- 门（三态）
+/** 忽略站点输入 → 主机名数组：按行、小写化、去重（C7 settings 语义）。 */
+export function parseHostList(text) {
+  const seen = new Set();
+  for (const raw of String(text ?? "").split(/\n+/)) {
+    const host = raw.trim().toLowerCase();
+    if (host) seen.add(host);
+  }
+  return [...seen];
+}
 
-async function renderGate() {
-  const status = await send("status");
-  updateFoot(status);
-  if (status.error) {
-    showGate("无法访问保管箱", status.error, "重试", async () => renderGate());
-    return;
+/** 自动锁定分钟数：非负整数，0=禁用，封顶 240（旧版口径）。 */
+export function clampAutoLock(value) {
+  const parsed = Math.floor(Number(value));
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.min(parsed, 240);
+}
+
+/** 二进制探测：给定头几个字节，含 \x00 即二进制（scan.py:92-98 同构）。 */
+export function isBinaryHead(bytes) {
+  return bytes instanceof Uint8Array && bytes.includes(0);
+}
+
+/** 整库清除的 UI 双门：主密码（鉴权门）与 RESET（二次确认门）缺一不可。
+ * 只做交互门校验；真正的口令认证在 background 的 C1#30 reset。 */
+export function checkResetGates(password, phrase) {
+  if (!password) return "鉴权门未过：先输入主密码";
+  if (phrase !== RESET_CONFIRM_PHRASE) {
+    return `二次确认门未过：请在确认框原样输入 ${RESET_CONFIRM_PHRASE}`;
+  }
+  return null;
+}
+
+/** 「设为平台」的可记住纠正范围，对齐 suggest_correction_scope（键名 > 主机名）。
+ * 组默认不会被静默建议（corrections.js 的纪律）。返回 {kind,pattern,desc} 或 null。 */
+export function suggestScopeFor(record) {
+  const suggestion = suggestCorrectionScope(
+    { keyName: record?.keyName ?? null, hostnames: hostsIn(record?.sourceUrl ?? "") },
+    null,
+  );
+  if (!suggestion) return null;
+  const [kind, pattern, desc] = suggestion;
+  return { kind, pattern, desc };
+}
+
+/**
+ * 把一段文本按**行界**切块，每块 ≤ maxChars（超长单行独立成块不截断，交给
+ * 显式报错路径）。行号按块累计：块内行号 + lineOffset = 原文行号。
+ * split 与 scan.js 的 /\r\n|\r|\n/ 同式，行数两侧一致。
+ */
+export function chunkTextByLines(content, maxChars) {
+  const lines = String(content ?? "").split(/\r\n|\r|\n/);
+  const chunks = [];
+  let buffer = [];
+  let budget = 0;
+  let offset = 0;
+  const flush = () => {
+    if (!buffer.length) return;
+    chunks.push({ content: buffer.join("\n"), lineOffset: offset });
+    offset += buffer.length;
+    buffer = [];
+    budget = 0;
+  };
+  for (const line of lines) {
+    if (buffer.length && budget + line.length > maxChars) flush();
+    buffer.push(line);
+    budget += line.length + 1; // 预算按 join("\n") 分隔符计，宁多勿少
+  }
+  flush();
+  return chunks;
+}
+
+/**
+ * C6 分批规划：贪心装批，批 ≤ maxItems 条、总字符 ≤ maxTotalChars。
+ * 单条超过 maxContentChars 的块**独占一批**——引擎按批整体校验，隔离它的
+ * 失败不拖累其他文本，超限项最终走显式报错而非静默丢。
+ */
+export function planScanBatches(items, {
+  maxItems = MAX_TEXTS_PER_CALL,
+  maxTotalChars = MAX_TOTAL_CHARS,
+  maxContentChars = MAX_CONTENT_CHARS,
+} = {}) {
+  const batches = [];
+  let current = [];
+  let total = 0;
+  let currentHasOversized = false;
+  const flush = () => {
+    if (!current.length) return;
+    batches.push(current);
+    current = [];
+    total = 0;
+    currentHasOversized = false;
+  };
+  for (const item of items) {
+    const size = item.chunk.length;
+    const oversized = size > maxContentChars;
+    if (current.length && (oversized || currentHasOversized || current.length >= maxItems || total + size > maxTotalChars)) {
+      flush();
+    }
+    current.push(item);
+    total += size;
+    if (oversized) currentHasOversized = true;
+  }
+  flush();
+  return batches;
+}
+
+/** 块内行号 → 文件真实行号：按内部块名映射回显示路径并加行偏移。
+ * 未知块名原样保留——一次映射失败不吞掉任何命中。 */
+export function decorateHits(hits, items) {
+  const byName = new Map(items.map((item) => [item.name, item]));
+  return hits.map((hit) => {
+    const item = byName.get(hit.textName);
+    if (!item) return hit;
+    return { ...hit, path: item.path, lineNo: hit.lineNo + (item.lineOffset ?? 0) };
+  });
+}
+
+/** 消息通道异常翻译（MV3：扩展更新/重载后旧页面 context invalidated、SW
+ * 启动失败时 sendMessage 会 reject）——send 捕获后翻译成可读错误，调用方的
+ * response.error 路径照常工作，页面不再静默无反应。 */
+export function translateChannelError(error) {
+  const reason = error?.message ?? String(error);
+  return `消息通道失败：${reason}（扩展可能已重载——请关闭本页重新打开）`;
+}
+
+/** 三态门编排（纯函数，renderGate 只做渲染）：status → 门的状态与文案。
+ * error = background 无响应/通道失败（给重试），setup/unlock/open 同名。 */
+export function planGateState(status) {
+  if (!status || status.error) {
+    return {
+      mode: "error",
+      title: "无法访问保管箱",
+      desc: status?.error ?? "background 没有响应，请重试",
+      button: "重试",
+    };
   }
   if (!status.initialized) {
-    showGate("设置主密码，创建本机保管箱",
-      "加密数据只存本机浏览器；主密码不设恢复——忘了就是忘了。", "创建",
-      async () => {
-        const response = await send("setup", { password: $("gate-password").value });
-        if (response.error) return response.error;
-        return null;
-      });
-    return;
+    return {
+      mode: "setup",
+      title: "设置主密码，创建本机保管箱",
+      desc: "加密数据只存本机浏览器（IndexedDB）；主密码不设恢复——忘了就是忘了。至少 8 位。",
+      button: "创建",
+    };
   }
   if (!status.unlocked) {
-    showGate("输入主密码解锁", "", "解锁", async () => {
-      const response = await send("unlock", { password: $("gate-password").value });
-      return response.error ?? null;
-    });
-    return;
+    return { mode: "unlock", title: "输入主密码解锁", desc: "", button: "解锁" };
   }
-  $("gate").classList.add("hidden");
-  $("lock-btn").classList.remove("hidden");
-  await renderTab();
+  return { mode: "open" };
 }
 
-function showGate(title, desc, buttonLabel, submitter) {
+/** 批量导入结果文案：新建/去重/跳过(+拒绝) 与 skipped 首条（不含值，C1#20）。 */
+export function formatImportResult(summary) {
+  if (!summary || summary.error) return null;
+  const skipped = summary.skipped ?? [];
+  const parts = [
+    `新建 ${summary.created ?? 0}`,
+    `去重 ${summary.deduped ?? 0}`,
+    `跳过 ${skipped.length}`,
+  ];
+  if (summary.rejected) parts.push(`拒绝 ${summary.rejected}`);
+  if (skipped.length) {
+    parts.push(`首条：${skipped[0].platform} · ${skipped[0].confidence} · ${skipped[0].preview}`);
+  }
+  return parts.join(" · ");
+}
+
+/** 备份恢复结果文案。 */
+export function formatRestoreResult(summary) {
+  if (!summary || summary.error) return null;
+  const parts = [`新建 ${summary.created ?? 0}`, `去重 ${summary.deduped ?? 0}`];
+  if (summary.rejected) parts.push(`拒绝 ${summary.rejected}`);
+  return `恢复完成：${parts.join(" · ")}`;
+}
+
+/** 扫描结果聚合（纯函数，renderScanResults 只做渲染）：状态行文案、好坏配色、
+ * 完整错误清单（读取失败在前，被拒批次在后）。 */
+export function summarizeScanRun(collected, { batchCount, hits, failed }) {
+  const parts = [
+    `扫描完成：${hits.length} 处命中`,
+    `${batchCount} 批 / ${collected.items.length} 条文本`,
+  ];
+  if (collected.skippedBinary) parts.push(`跳过二进制 ${collected.skippedBinary}`);
+  if (collected.skippedLarge) parts.push(`跳过超大文件 ${collected.skippedLarge}`);
+  return {
+    statusText: parts.join(" · "),
+    statusCls: hits.length ? "bad" : "ok",
+    errors: [...collected.readErrors, ...failed],
+  };
+}
+
+// ---------------------------------------------------------------- 消息与门
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, className = null, text = null) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== null) node.textContent = text;
+  return node;
+}
+
+let toastTimer = null;
+function toast(message) {
+  const node = $("toast");
+  node.textContent = message;
+  node.classList.remove("hidden");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => node.classList.add("hidden"), 2600);
+}
+
+let hintTimer = null;
+/** 抽屉的操作反馈（弹层之下 toast 会被盖住，抽屉内反馈走这里）。 */
+function drawerHint(message, cls = "ok") {
+  const node = $("drawer-hint");
+  node.textContent = message;
+  node.className = `hint ${cls}`;
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => {
+    node.textContent = "";
+    node.className = "hint";
+  }, 4000);
+}
+
+function renderStatusPill(status) {
+  const dot = $("status-dot");
+  dot.className = "dot";
+  if (status?.unlocked) {
+    dot.classList.add("ok");
+    $("status-text").textContent = "已解锁";
+  } else if (status?.initialized) {
+    dot.classList.add("bad");
+    $("status-text").textContent = "已锁定";
+  } else {
+    dot.classList.add("bad");
+    $("status-text").textContent = "未初始化";
+  }
+  $("lock-btn").classList.toggle("hidden", !status?.unlocked);
+}
+
+function showGate({ title, desc, button, action }) {
   $("gate").classList.remove("hidden");
-  $("lock-btn").classList.add("hidden");
-  for (const section of document.querySelectorAll(".tab")) section.classList.add("hidden");
   $("gate-title").textContent = title;
   $("gate-desc").textContent = desc;
   $("gate-error").textContent = "";
-  $("gate-submit").textContent = buttonLabel;
-  $("gate-submit").onclick = async () => {
-    const error = await submitter();
-    if (error) { $("gate-error").textContent = error; return; }
-    await renderGate();
+  const submitButton = $("gate-submit");
+  submitButton.textContent = button;
+  submitButton.onclick = async () => {
+    submitButton.disabled = true;
+    $("gate-error").textContent = "";
+    try {
+      const response = await action($("gate-password").value);
+      if (response?.error) {
+        $("gate-error").textContent = response.error;
+        return;
+      }
+      $("gate-password").value = "";
+      await renderGate();
+    } finally {
+      submitButton.disabled = false;
+    }
   };
-  $("gate-password").onkeydown = (e) => { if (e.key === "Enter") $("gate-submit").click(); };
   setTimeout(() => $("gate-password").focus(), 50);
 }
 
-function updateFoot(status) {
-  const dot = $("foot-dot");
-  dot.className = "dot";
-  if (status.unlocked) { dot.classList.add("ok"); $("foot-text").textContent = "已解锁"; }
-  else if (status.initialized) { dot.classList.add("bad"); $("foot-text").textContent = "已锁定"; }
-  else { dot.classList.add("bad"); $("foot-text").textContent = "未初始化"; }
-  $("lock-btn").classList.toggle("hidden", !status.unlocked);
-}
+// 三态门各模式的提交动作（error 模式的「重试」只是重新拉 status）
+const GATE_ACTIONS = {
+  error: async () => ({}),
+  setup: (password) => send("setup", { password }),
+  unlock: (password) => send("unlock", { password }),
+};
 
-$("lock-btn").addEventListener("click", async () => {
-  await send("lock");
-  await renderGate();
-});
-
-// ---------------------------------------------------------------- 分区导航
-
-for (const button of document.querySelectorAll("#nav button")) {
-  button.addEventListener("click", () => {
-    for (const b of document.querySelectorAll("#nav button")) b.classList.remove("active");
-    button.classList.add("active");
-    renderTab(button.dataset.tab);
+async function renderGate() {
+  const status = await send("status");
+  renderStatusPill(status);
+  const plan = planGateState(status);
+  if (plan.mode === "open") {
+    $("side-version").textContent = status.version ? `v${status.version}` : "";
+    $("gate").classList.add("hidden");
+    await renderTab(currentTab);
+    return;
+  }
+  showGate({
+    title: plan.title,
+    desc: plan.desc,
+    button: plan.button,
+    action: GATE_ACTIONS[plan.mode],
   });
 }
 
-async function renderTab(tab = document.querySelector("#nav button.active")?.dataset.tab
-  ?? "dashboard") {
-  for (const section of document.querySelectorAll(".tab")) section.classList.add("hidden");
-  $(`tab-${tab}`).classList.remove("hidden");
-  if (tab === "dashboard") await renderDashboard();
-  if (tab === "secrets") await renderSecrets();
-  if (tab === "audit") await renderAudit();
-  if (tab === "tools") renderToolsReset();
-  if (tab === "settings") await renderSettings();
+/** 会话中途被自动锁定：门还开着时不打扰（解锁/创建流程中失败自带 locked
+ * 标记，由门内错误行展示），门关着时把整页翻回解锁门。.gate 是普通 div 盖
+ * 不到 top-layer 的 modal dialog——锁定时必须主动关抽屉/表单、停活码、清
+ * 抽屉体（种子明文闭包随节点一并释放），不允许「已锁定」与可交互弹层并存。 */
+function handleLockedResponse(response) {
+  if (response?.locked && $("gate").classList.contains("hidden")) {
+    stopTotp();
+    const drawer = $("drawer");
+    if (drawer.open) drawer.close();
+    $("drawer-body").textContent = "";
+    const formDialog = $("form-dialog");
+    if (formDialog.open) formDialog.close();
+    renderStatusPill({ unlocked: false, initialized: true });
+    showGate({
+      title: "保管箱已锁定",
+      desc: "无操作超时自动锁定——输入主密码解锁",
+      button: "解锁",
+      action: (password) => send("unlock", { password }),
+    });
+  }
 }
 
-// ---------------------------------------------------------------- 仪表盘
+/** 发消息。永不 reject：通道异常（扩展重载/更新后 context invalidated、SW
+ * 启动失败）翻译成 {error}，调用方现成的 response.error 路径即接管——点
+ * 刷新/导入/保存/扫描不再静默无反应。响应带 locked:true 且门还关着时统一
+ * 翻回解锁门——自动锁定可能在任一条消息途中生效，不能指望每条调用方都记得检查。 */
+async function send(kind, extra = {}) {
+  let response;
+  try {
+    response = await chrome.runtime.sendMessage({ kind, ...extra });
+  } catch (error) {
+    return { error: translateChannelError(error) };
+  }
+  handleLockedResponse(response);
+  return response ?? { error: "background 无响应" };
+}
+
+// ---------------------------------------------------------------- 导航
+
+let currentTab = "dashboard";
+
+function selectTab(tab) {
+  currentTab = tab;
+  for (const button of document.querySelectorAll("#nav button")) {
+    button.classList.toggle("active", button.dataset.tab === tab);
+  }
+  return renderTab(tab);
+}
+
+async function renderTab(tab) {
+  for (const section of document.querySelectorAll(".tab")) section.classList.add("hidden");
+  const section = $(`tab-${tab}`);
+  if (section) section.classList.remove("hidden");
+  $("page-title").textContent = TAB_TITLES[tab] ?? "KeyVault";
+  const renderer = RENDERERS[tab];
+  if (renderer) await renderer();
+}
+
+async function refresh() {
+  await renderTab(currentTab);
+}
+
+const RENDERERS = {
+  dashboard: renderDashboard,
+  secrets: renderSecrets,
+  audit: renderAudit,
+  import: () => {},      // 表单即界面，状态常驻
+  backup: () => {},
+  scan: () => {},
+  settings: renderSettings,
+};
+
+// ---------------------------------------------------------------- ① 仪表盘
 
 async function renderDashboard() {
   const stats = await send("stats");
-  const cards = [
-    { label: "全部", num: stats.total, cls: "" },
-    { label: "启用", num: stats.active, cls: "" },
-    { label: "30 天内到期", num: stats.expiring, cls: "warn" },
-    { label: "吊销 / 过期", num: stats.flagged, cls: "bad" },
-  ];
-  const row = $("stat-cards");
-  row.textContent = "";
-  for (const card of cards) {
-    const div = document.createElement("div");
-    div.className = `stat-card ${card.cls}`;
-    const num = document.createElement("div");
-    num.className = "num";
-    num.textContent = String(card.num);
-    const label = document.createElement("div");
-    label.className = "label";
-    label.textContent = card.label;
-    div.append(num, label);
-    row.appendChild(div);
-  }
+  if (!stats || stats.error) return;
+  $("stat-total").textContent = String(stats.total ?? 0);
+  $("stat-active").textContent = String(stats.active ?? 0);
+  $("stat-expiring").textContent = String(stats.expiring ?? 0);
+  $("stat-flagged").textContent = String(stats.flagged ?? 0);
+  renderPlatformList(stats.platforms ?? []);
+}
+
+function renderPlatformList(platforms) {
   const list = $("platform-list");
   list.textContent = "";
-  if (!stats.platforms.length) {
-    const li = document.createElement("li");
-    li.textContent = "还没有启用中的记录";
-    list.appendChild(li);
+  if (!platforms.length) {
+    list.append(el("li", "muted small", "还没有启用中的记录"));
     return;
   }
-  for (const { platform, count } of stats.platforms) {
-    const li = document.createElement("li");
-    const dot = document.createElement("span");
-    dot.className = "p-dot";
-    const name = document.createElement("span");
-    name.className = "p-name";
-    name.textContent = platform;
-    const num = document.createElement("span");
-    num.className = "p-count";
-    num.textContent = String(count);
-    li.append(dot, name, num);
-    list.appendChild(li);
+  const max = Math.max(...platforms.map((entry) => entry.count), 1);
+  for (const { platform, count } of platforms) {
+    const row = el("li", "platform-row");
+    const bar = el("span", "p-bar");
+    bar.style.width = `${Math.max(Math.round((count / max) * 100), 4)}%`;
+    row.append(el("span", "p-name", platform), bar, el("span", "p-count", String(count)));
+    list.append(row);
   }
 }
 
-// ---------------------------------------------------------------- 密钥管理
-
-let seedCache = new Map(); // id -> base32 种子（页面内存，关页即失）
+// ---------------------------------------------------------------- ② 密钥表格
 
 async function renderSecrets() {
-  const rows = await send("list", {
+  const response = await send("list", {
     query: $("search").value.trim(),
     status: $("status-filter").value,
   });
+  const rows = response?.rows;
+  if (!rows) return; // 锁定等错误已由门接管
   const tbody = $("rows");
   tbody.textContent = "";
   const empty = $("table-empty");
   if (!rows.length) {
-    empty.textContent = $("search").value.trim() ? "没有匹配的记录" : "库里还没有密钥——去网页上复制一个试试";
+    empty.textContent = $("search").value.trim()
+      ? "没有匹配的记录"
+      : "库里还没有密钥——去网页上复制一个，或用右上角「添加密钥」手动录入";
     empty.classList.remove("hidden");
     return;
   }
   empty.classList.add("hidden");
   for (const row of rows) {
-    const tr = document.createElement("tr");
-    tr.className = `st-${row.status}`;
-    const name = document.createElement("td");
-    name.textContent = row.name;
-    const platform = document.createElement("td");
-    platform.textContent = row.platform;
-    const status = document.createElement("td");
-    status.className = `status-dot-${row.status}`;
-    status.textContent = `● ${STATUS_LABEL[row.status] ?? row.status}`;
-    const preview = document.createElement("td");
-    preview.className = "preview";
-    preview.textContent = row.preview;
-    const updated = document.createElement("td");
-    updated.textContent = (row.updatedAt ?? "").slice(0, 19).replace("T", " ");
-    tr.append(name, platform, status, preview, updated);
-    tr.addEventListener("click", () => openDetail(row));
-    tbody.appendChild(tr);
+    tbody.append(secretRow(row));
   }
 }
 
-$("search").addEventListener("input", () => renderSecrets());
-$("status-filter").addEventListener("change", () => renderSecrets());
+function secretRow(row) {
+  const tr = el("tr");
+  tr.append(
+    el("td", "name", row.name),
+    el("td", "muted", row.platform),
+    el("td", null, null),
+    el("td", "preview", row.preview),
+    el("td", "muted", formatStamp(row.updatedAt)),
+  );
+  const statusCell = tr.children[2];
+  statusCell.append(el("span", `st st-${row.status}`, STATUS_LABEL[row.status] ?? row.status));
+  tr.addEventListener("click", () => openDetail(row.id));
+  return tr;
+}
 
-// ---------------------------------------------------------------- 详情抽屉
+// ---------------------------------------------------------------- ③ 详情抽屉
 
-async function openDetail(row) {
-  const detail = await send("get", { id: row.id });
-  const dialog = $("detail");
-  dialog.textContent = "";
-  const body = document.createElement("div");
-  body.className = "dialog-body";
+let openDetailId = null;
+// openDetail 竞态守卫：SW 冷启动首条消息可达数百 ms，连点两行会有两个并发
+// get——响应回来时序号已过期者整包丢弃（同 popup.js searchSeq 的纪律）
+let openDetailSeq = 0;
+let totpTimer = null;
+const TOTP_RING_SIZE = 46;
 
-  const title = document.createElement("h2");
-  title.textContent = detail.name;
-  const badges = document.createElement("div");
-  badges.className = "badges";
-  const platformBadge = document.createElement("span");
-  platformBadge.className = "badge";
-  platformBadge.textContent = `${detail.platform} · ${detail.status}`;
-  badges.appendChild(platformBadge);
-
-  body.append(title, badges);
-
-  // TOTP 活码：记录值是 base32 种子时出现（试算一次，失败即无此节）
-  if (detail.status === "active") {
-    try {
-      const revealed = await send("reveal", { id: detail.id, event: "totp" });
-      const seed = parseSeed(revealed.value);
-      seedCache.set(detail.id, b64OfSeed(seed));
-      const box = document.createElement("div");
-      box.className = "totp-box";
-      const code = document.createElement("div");
-      code.className = "totp-code";
-      const remain = document.createElement("div");
-      remain.className = "muted";
-      box.append(code, remain);
-      body.appendChild(box);
-      const tick = async () => {
-        if (!dialog.open) return;
-        const [value, remaining] = await generate(seed, new Date());
-        code.textContent = `${value.slice(0, 3)} ${value.slice(3)}`;
-        remain.textContent = `${remaining}s 后刷新`;
-        setTimeout(tick, 1000);
-      };
-      tick();
-    } catch (_) { /* 值不是 TOTP 种子：无活码节 */ }
+function stopTotp() {
+  if (totpTimer) {
+    clearTimeout(totpTimer);
+    totpTimer = null;
   }
+}
 
-  const grid = document.createElement("div");
-  grid.className = "field-grid";
-  const fields = [
-    ["平台", detail.platform], ["状态", STATUS_LABEL[detail.status] ?? detail.status],
-    ["键名", detail.keyName ?? "—"], ["预览", detail.preview, true],
+async function openDetail(id) {
+  const seq = ++openDetailSeq;
+  const response = await send("get", { id });
+  if (seq !== openDetailSeq) return; // 过期响应：另一行已被打开
+  if (!response || response.error) {
+    toast(`读取详情失败：${response?.error ?? "background 无响应"}`);
+    return;
+  }
+  const detail = response.record;
+  openDetailId = detail.id;
+  $("drawer-title").textContent = detail.name;
+  renderDrawerBadges(detail);
+  const body = $("drawer-body");
+  body.textContent = ""; // 重建即弃旧节：上一条记录的活码闭包一并释放
+  stopTotp();
+  appendFieldGrid(body, detail);
+  appendFingerprints(body, detail);
+  appendActions(body, detail);
+  const dialog = $("drawer");
+  if (!dialog.open) dialog.showModal();
+}
+
+function renderDrawerBadges(detail) {
+  const badges = $("drawer-badges");
+  badges.textContent = "";
+  badges.append(
+    el("span", "badge", detail.platform),
+    el("span", `badge st st-${detail.status}`, STATUS_LABEL[detail.status] ?? detail.status),
+    el("span", "badge", `置信度：${CONFIDENCE_LABEL[detail.confidence] ?? detail.confidence}`),
+    el("span", "badge", `种类：${detail.kind}`),
+  );
+}
+
+/** TOTP 活码的显式入口，对齐桌面 open_totp_for_secret（totp_window.py:78-101）
+ * 的入口纪律：非种子记录不该为「看看详情」付一次 reveal——打开详情零 reveal，
+ * 点击「显示验证码」才 reveal(event:"totp")；SeedError 给提示、不开节。
+ * 活码节每秒重算重绘（totp_window.py:51-58 同款）。 */
+async function showTotpSection(detail) {
+  const body = $("drawer-body");
+  if (body.querySelector(".totp-section")) return;
+  let seed;
+  try {
+    const revealed = await send("reveal", { id: detail.id, event: "totp" });
+    if (!revealed || revealed.error) {
+      drawerHint(`读取失败：${revealed?.error ?? "background 无响应"}`, "err");
+      return;
+    }
+    seed = parseSeed(revealed.value);
+  } catch (_) {
+    // totp_window.py:93-95 的提示文案
+    drawerHint(`「${detail.name}」的值不是 base32 种子。种子是验证器「显示密钥」里那串。`, "err");
+    return;
+  }
+  // 等待 reveal 期间抽屉可能被重建（另一行）或被自动锁定关闭——不再落节
+  if (!$("drawer").open || openDetailId !== detail.id) return;
+  body.prepend(buildTotpBlock(seed));
+}
+
+function buildTotpBlock(seed) {
+  const block = document.createDocumentFragment();
+  block.append(el("h3", "section-title", "TOTP 活码"));
+  const section = el("div", "totp-section");
+  const canvas = document.createElement("canvas");
+  canvas.className = "totp-canvas";
+  canvas.width = TOTP_RING_SIZE;
+  canvas.height = TOTP_RING_SIZE;
+  const codeEl = el("div", "totp-code", "· · ·");
+  const remainEl = el("div", "totp-remain", "");
+  const main = el("div", "totp-main");
+  main.append(codeEl, remainEl);
+  let currentCode = "";
+  section.append(
+    canvas,
+    main,
+    actionButton("复制验证码", "ghost", async () => {
+      if (!currentCode) return;
+      try {
+        await navigator.clipboard.writeText(currentCode);
+      } catch (error) {
+        drawerHint(`写剪贴板失败：${error.message}`, "err");
+        return;
+      }
+      const copied = await send("copied");
+      drawerHint(copied?.ok ? "已复制验证码" : "已复制验证码（本次未安排自动擦除）");
+    }),
+  );
+  block.append(section);
+  // 浏览器无 exclude_history 能力（C9#7）——TOTP 复制路径同样带限制声明
+  block.append(el("p", "muted small",
+    "验证码 30 秒轮换；复制走剪贴板自动擦除通道（浏览器剪贴板历史 Win+V 无法排除——擦除只清当前剪贴板）"));
+  const tick = async () => {
+    if (!$("drawer").open) return;
+    const { code, remaining } = await generate(seed, new Date());
+    currentCode = code;
+    codeEl.textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
+    remainEl.textContent = `${remaining}s 后刷新`;
+    drawTotpRing(canvas, remaining);
+    totpTimer = setTimeout(tick, 1000);
+  };
+  stopTotp();
+  tick();
+  return block;
+}
+
+/** 倒计时环：桌面 _draw_ring 同款——底环描边 + 按剩余比例的弧，起点 12 点
+ * 方向，剩 5s 内转琥珀色（「快过期了」是状态指示不是装饰）。 */
+function drawTotpRing(canvas, remaining) {
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const scaled = Math.round(TOTP_RING_SIZE * dpr);
+  if (canvas.width !== scaled) {
+    canvas.width = scaled;
+    canvas.height = scaled;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, TOTP_RING_SIZE, TOTP_RING_SIZE);
+  const center = TOTP_RING_SIZE / 2;
+  const radius = center - 4;
+  const start = -Math.PI / 2;
+  const full = Math.PI * 2;
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = cssToken("--ring-track", "#e5e8f0");
+  ctx.beginPath();
+  ctx.arc(center, center, radius, start, start + full);
+  ctx.stroke();
+  ctx.strokeStyle = remaining <= 5 ? cssToken("--warn", "#d97706") : cssToken("--accent", "#3d5fe8");
+  ctx.beginPath();
+  ctx.arc(center, center, radius, start, start + full * (remaining / PERIOD));
+  ctx.stroke();
+  ctx.fillStyle = cssToken("--text-2", "#5f6b81");
+  ctx.font = "600 12px 'Cascadia Mono', Consolas, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(remaining), center, center + 0.5);
+}
+
+function cssToken(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+/** 详情字段网格，16 项对齐桌面 detail_rows（detail_window.py:16-27）。
+ * 有意分歧（C9 纪律，review 可指出）：桌面详情窗的「操作历史」节不移植——
+ * C1#8 的 get 契约无 history 字段，完整轨迹统一由④审计日志区承担；这与桌面
+ * 自己的指向一致（detail_window.py:36 尾注「完整轨迹见 安全 → 审计日志」）。 */
+function detailFields(detail) {
+  return [
+    ["平台", detail.platform],
+    ["状态", STATUS_LABEL[detail.status] ?? detail.status],
+    ["置信度", CONFIDENCE_LABEL[detail.confidence] ?? detail.confidence],
+    ["种类", detail.kind],
+    ["键名", detail.keyName ?? "—"],
+    ["预览", detail.preview, true],
     ["标签", (detail.tags ?? []).join(", ") || "—"],
+    ["别名", (detail.aliases ?? []).join(", ") || "—"],
     ["备注", detail.note || "—"],
     ["来源", `${detail.origin}${detail.sourceUrl ? " · " + detail.sourceUrl : ""}`],
-    ["创建", (detail.createdAt ?? "").slice(0, 19).replace("T", " ")],
-    ["更新", (detail.updatedAt ?? "").slice(0, 19).replace("T", " ")],
+    ["创建", formatStamp(detail.createdAt)],
+    ["更新", formatStamp(detail.updatedAt)],
     ["过期", detail.expiresAt ?? "—"],
-    ["指纹历史", (detail.fingerprints ?? []).map((f) =>
-      `${f.sha256Prefix} ${f.status}`).join(" / ") || "—"],
+    ["最后使用", formatStamp(detail.lastUsedAt) || "—"],
+    ["值长度", String(detail.valueLen ?? "")],
+    ["sha256", detail.sha256, true],
   ];
-  for (const [k, v, clickable] of fields) {
-    const kEl = document.createElement("div");
-    kEl.className = "k";
-    kEl.textContent = k;
-    const vEl = document.createElement("div");
-    vEl.className = "v" + (clickable ? " clickable" : "");
-    vEl.textContent = String(v);
-    if (clickable) {
-      vEl.title = "点击复制（非敏感值）";
-      vEl.addEventListener("click", () => navigator.clipboard.writeText(String(v)));
+}
+
+function appendFieldGrid(body, detail) {
+  body.append(el("h3", "section-title", "基本信息"));
+  const grid = el("div", "field-grid");
+  for (const [label, value, copyable] of detailFields(detail)) {
+    grid.append(el("div", "k", label));
+    const cell = el("div", `v${copyable ? " clickable" : ""}`, String(value));
+    if (copyable) {
+      cell.title = "点击复制（非敏感值）";
+      cell.addEventListener("click", () => copyPlain(String(value)));
     }
-    grid.append(kEl, vEl);
+    grid.append(cell);
   }
-  body.appendChild(grid);
+  body.append(grid);
+  if (detail.evidence) {
+    body.append(el("h3", "section-title", "判定依据"));
+    body.append(el("p", "evidence", detail.evidence));
+  }
+}
 
-  const actions = document.createElement("div");
-  actions.className = "dialog-actions";
+/** 指纹历史：16 位前缀 + 状态 + 首见时间（对齐 detail_window.py:31 的行格式）。 */
+function appendFingerprints(body, detail) {
+  const fingerprints = detail.fingerprints ?? [];
+  if (!fingerprints.length) return;
+  body.append(el("h3", "section-title", "指纹历史"));
+  const list = el("ul", "fp-list");
+  for (const fp of fingerprints) {
+    list.append(el("li", `fp-row${fp.status === "active" ? "" : " muted"}`,
+      `${fp.sha256Prefix}  ${fp.status}  ${formatStamp(fp.firstSeenAt)}`));
+  }
+  body.append(list);
+}
+
+function appendActions(body, detail) {
+  body.append(el("h3", "section-title", "操作"));
+  const actions = el("div", "dialog-actions");
+  actions.append(actionButton("复制值", "primary", () => copySecretValue(detail)));
+  actions.append(actionButton("显示验证码", "ghost", () => showTotpSection(detail)));
   if (detail.status === "active") {
-    actions.appendChild(actionButton("复制值", async () => {
-      const revealed = await send("reveal", { id: detail.id, event: "copy" });
-      await navigator.clipboard.writeText(revealed.value);
-      await send("copied");
-      return `已复制，30 秒后自动擦除`;
-    }));
-    actions.appendChild(actionButton("轮换", () => showForm({
-      title: `轮换 — ${detail.name}`, fields: [["新值", "value", true]],
-      submit: async (data) => send("rotate", { id: detail.id, value: data.value }),
-    })));
-    actions.appendChild(actionButton("吊销", () => confirmAnd(
-      `吊销 ${detail.name}？`, () => send("revoke", { id: detail.id }))));
-  }
-  if (detail.status === "revoked" || detail.status === "expired") {
-    actions.appendChild(actionButton("重新启用", async () => {
-      await send("set-platform", { id: detail.id, platform: detail.platform });
-      return null;
+    actions.append(actionButton("轮换", "ghost", () => openRotateForm(detail)));
+    actions.append(actionButton("吊销", "ghost", () => {
+      if (!confirm(`吊销 ${detail.name}？吊销的值不再启用，但仍会参与泄露扫描——它可能已经泄出去了。`)) return;
+      return drawerAction(detail, send("revoke", { id: detail.id }), `已吊销 ${detail.name}`);
     }));
   }
-  actions.appendChild(actionButton("重命名", () => showForm({
-    title: `重命名 — ${detail.name}`, fields: [["新名称", "name"]],
-    initial: { name: detail.name },
-    submit: async (data) => send("rename", { id: detail.id, name: data.name }),
-  })));
-  actions.appendChild(actionButton("设为平台", () => showForm({
-    title: `设为平台 — ${detail.name}`, fields: [["平台 id", "platform"]],
-    initial: { platform: detail.platform },
-    submit: async (data) => send("set-platform", {
-      id: detail.id, platform: data.platform,
-      remember: detail.keyName ? { kind: "keyname", pattern: `^${detail.keyName}$` } : null,
-    }),
-  })));
-  actions.appendChild(actionButton("删除", () => confirmAnd(
-    `删除 ${detail.name}？审计记录保留。`, () => send("delete", { id: detail.id }),
-    true)));
-  actions.appendChild(closeButton(dialog));
-  body.appendChild(actions);
-  dialog.appendChild(body);
-  dialog.showModal();
-  dialog.addEventListener("close", () => {
-    seedCache.delete(detail.id);
-    renderSecrets();
-  }, { once: true });
+  actions.append(actionButton("重命名", "ghost", () => openRenameForm(detail)));
+  actions.append(actionButton("设为平台", "ghost", () => openSetPlatformForm(detail)));
+  actions.append(actionButton("删除", "danger", () => {
+    if (!confirm(`删除 ${detail.name}？审计记录保留（名字快照），但值本身没了。`)) return;
+    return drawerAction(detail, send("delete", { id: detail.id }), `已删除 ${detail.name}`, { closeOnSuccess: true });
+  }));
+  body.append(actions);
+  body.append(el("p", "muted small",
+    "浏览器剪贴板历史（Win+V）无法排除——30 秒擦除只清当前剪贴板。"));
 }
 
-function b64OfSeed(bytes) {
-  return btoa(String.fromCharCode(...bytes));
-}
-
-function actionButton(label, action) {
-  const button = document.createElement("button");
-  button.textContent = label;
-  button.className = "primary";
+function actionButton(label, kind, run) {
+  const button = el("button", `btn ${kind}`, label);
   button.addEventListener("click", async () => {
-    const error = await action();
-    if (error) alert(error);
+    button.disabled = true;
+    try {
+      await run();
+    } finally {
+      button.disabled = false;
+    }
   });
   return button;
 }
 
-function closeButton(dialog) {
-  const button = document.createElement("button");
-  button.textContent = "关闭";
-  button.addEventListener("click", () => dialog.close());
-  return button;
-}
-
-async function confirmAnd(message, action, danger = false) {
-  if (!confirm(message)) return null;
-  const response = await action();
-  return response?.error ?? null;
-}
-
-// 通用小表单（轮换/重命名/设平台）
-function showForm({ title, fields, initial = {}, submit }) {
-  const dialog = $("form-dialog");
-  dialog.textContent = "";
-  const body = document.createElement("div");
-  body.className = "dialog-body";
-  const heading = document.createElement("h2");
-  heading.textContent = title;
-  body.appendChild(heading);
-  const inputs = [];
-  for (const [label, key, isPassword] of fields) {
-    const row = document.createElement("div");
-    row.className = "form-row";
-    const labelEl = document.createElement("label");
-    labelEl.textContent = label;
-    const input = document.createElement("input");
-    input.type = isPassword ? "password" : "text";
-    if (initial[key]) input.value = initial[key];
-    row.append(labelEl, input);
-    body.appendChild(row);
-    inputs.push([key, input]);
+/** 复制值：reveal(event:"copy") → 写剪贴板 → copied 安排 30s 擦除（C7）。
+ * 文案与 popup 复制行同款。 */
+async function copySecretValue(detail) {
+  const revealed = await send("reveal", { id: detail.id, event: "copy" });
+  if (!revealed || revealed.error) {
+    drawerHint(`复制失败：${revealed?.error ?? "background 无响应"}`, "err");
+    return;
   }
-  const error = document.createElement("div");
-  error.className = "error";
-  const actions = document.createElement("div");
-  actions.className = "dialog-actions";
-  const cancel = document.createElement("button");
-  cancel.textContent = "取消";
-  cancel.addEventListener("click", () => dialog.close());
-  const submitButton = document.createElement("button");
-  submitButton.className = "primary";
-  submitButton.textContent = "确定";
-  submitButton.addEventListener("click", async () => {
-    const data = Object.fromEntries(inputs.map(([key, input]) => [key, input.value]));
-    const response = await submit(data);
-    if (response?.error) { error.textContent = response.error; return; }
-    dialog.close();
-    await renderSecrets();
+  try {
+    await navigator.clipboard.writeText(revealed.value);
+  } catch (error) {
+    drawerHint(`写剪贴板失败：${error.message}`, "err");
+    return;
+  }
+  const copied = await send("copied");
+  drawerHint(copied?.ok
+    ? `已复制 ${detail.name}，${copied.ttl} 秒后自动擦除`
+    : `已复制 ${detail.name}（本次未安排自动擦除）`);
+}
+
+function copyPlain(text) {
+  navigator.clipboard.writeText(text).then(
+    () => drawerHint("已复制（非敏感值）"),
+    (error) => drawerHint(`写剪贴板失败：${error.message}`, "err"),
+  );
+}
+
+/** 抽屉内动作：成功刷新抽屉（预览/指纹历史/状态即时更新）；delete 可选关门。 */
+async function drawerAction(detail, promise, doneMessage, { closeOnSuccess = false } = {}) {
+  const response = await promise;
+  if (!response || response.error) {
+    drawerHint(response?.error ?? "background 无响应", "err");
+    return false;
+  }
+  drawerHint(doneMessage);
+  if (closeOnSuccess) {
+    $("drawer").close();
+  } else {
+    await openDetail(detail.id);
+  }
+  return true;
+}
+
+function openRotateForm(detail) {
+  showForm({
+    title: `轮换 — ${detail.name}`,
+    controls: [{ label: "新值", key: "value", password: true }],
+    done: `已轮换 ${detail.name}——旧值进指纹历史（revoked），预览已更新`,
+    submit: (data) => send("rotate", { id: detail.id, value: data.value }),
   });
-  actions.append(cancel, submitButton);
-  body.append(error, actions);
-  dialog.appendChild(body);
+}
+
+function openRenameForm(detail) {
+  let newName = "";
+  showForm({
+    title: `重命名 — ${detail.name}`,
+    controls: [{ label: "新名称", key: "name", initial: detail.name }],
+    done: () => `已重命名为 ${newName}——旧名进别名，可按别名搜索`,
+    submit: (data) => {
+      newName = data.name;
+      return send("rename", { id: detail.id, name: data.name });
+    },
+  });
+}
+
+function openSetPlatformForm(detail) {
+  const scope = suggestScopeFor(detail);
+  let platformId = detail.platform;
+  let rememberedSuffix = "";
+  showForm({
+    title: `设为平台 — ${detail.name}`,
+    controls: [{ label: "平台 ID", key: "platform", initial: detail.platform }],
+    checkbox: scope
+      ? { label: scope.desc, checked: true }
+      : null, // 无键名也无主机名：不给组默认建议（不被静默选中）
+    done: () => `已设为 ${platformId}${rememberedSuffix}`,
+    submit: async (data, remember) => {
+      platformId = data.platform;
+      rememberedSuffix = scope && remember ? "，并记住纠正规则" : "";
+      return send("set-platform", {
+        id: detail.id,
+        platform: data.platform,
+        remember: scope && remember ? { kind: scope.kind, pattern: scope.pattern } : null,
+      });
+    },
+  });
+}
+
+// ---------------------------------------------------------------- 通用小表单
+
+/** 通用小表单：控件数组 + 可选复选框 + 提交回调。成功关门、给反馈并刷新；
+ * 失败把 {error} 文案写在表单里。 */
+function showForm({ title, controls, checkbox = null, done = "已完成", submit }) {
+  const dialog = $("form-dialog");
+  const body = $("form-body");
+  body.textContent = "";
+  body.append(el("h2", null, title));
+  const inputs = [];
+  for (const control of controls) {
+    const row = el("div", "form-row");
+    const input = document.createElement("input");
+    input.type = control.password ? "password" : "text";
+    input.value = control.initial ?? "";
+    row.append(el("label", null, control.label), input);
+    body.append(row);
+    inputs.push([control.key, input]);
+  }
+  let checkboxEl = null;
+  if (checkbox) {
+    const row = el("div", "form-row check-row");
+    checkboxEl = document.createElement("input");
+    checkboxEl.type = "checkbox";
+    checkboxEl.checked = checkbox.checked;
+    row.append(checkboxEl, el("label", null, checkbox.label));
+    body.append(row);
+  }
+  const errorEl = el("div", "error");
+  const actions = el("div", "dialog-actions");
+  const cancelButton = el("button", "btn ghost", "取消");
+  cancelButton.addEventListener("click", () => dialog.close());
+  const okButton = el("button", "btn primary", "确定");
+  okButton.addEventListener("click", async () => {
+    okButton.disabled = true;
+    errorEl.textContent = "";
+    try {
+      const data = Object.fromEntries(inputs.map(([key, input]) => [key, input.value]));
+      const response = await submit(data, checkboxEl?.checked ?? false);
+      if (response?.error) {
+        errorEl.textContent = response.error;
+        return;
+      }
+      dialog.close();
+      const doneText = typeof done === "function" ? done(response) : done;
+      if (openDetailId !== null) drawerHint(doneText);
+      else toast(doneText);
+      if (openDetailId !== null) await openDetail(openDetailId);
+      await refresh();
+    } finally {
+      okButton.disabled = false;
+    }
+  });
+  actions.append(cancelButton, okButton);
+  body.append(errorEl, actions);
+  // 关门即清：轮换新值/添加密钥值等明文不留残在隐藏弹层的 DOM 里（与
+  // backup/restore/reset 路径清空纪律一致）；一次监听覆盖 取消/Esc/成功 三条路径
+  dialog.addEventListener("close", () => {
+    for (const [, input] of inputs) input.value = "";
+    if (checkboxEl) checkboxEl.checked = false;
+    errorEl.textContent = "";
+  }, { once: true });
   dialog.showModal();
   inputs[0][1].focus();
 }
 
-// ---------------------------------------------------------------- 审计
-
-$("audit-refresh").addEventListener("click", () => renderAudit());
+// ---------------------------------------------------------------- ④ 审计日志
 
 async function renderAudit() {
-  const { rows, chainOk, firstBadId } = await send("audit");
-  $("chain-state").textContent = chainOk
-    ? "审计链完好" : `⚠ 审计链在第 ${firstBadId} 行断裂`;
+  const response = await send("audit", {});
+  if (!response) return;
+  const { rows, chainOk, firstBadId } = response;
+  if (!rows) return;
+  const chainEl = $("audit-chain");
+  chainEl.className = `chain-line ${chainOk ? "ok" : "bad"}`;
+  chainEl.textContent = chainOk
+    ? `审计链完好（${rows.length} 条记录）`
+    : `⚠ 审计链在第 ${firstBadId} 行断裂`;
   const tbody = $("audit-rows");
   tbody.textContent = "";
+  const empty = $("audit-empty");
   if (!rows.length) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 4;
-    td.textContent = "（空）";
-    tr.appendChild(td);
-    tbody.appendChild(tr);
+    empty.textContent = "还没有审计记录";
+    empty.classList.remove("hidden");
     return;
   }
+  empty.classList.add("hidden");
   for (const row of rows) {
-    const tr = document.createElement("tr");
-    const ts = document.createElement("td");
-    ts.textContent = (row.ts ?? "").slice(0, 19).replace("T", " ");
-    const event = document.createElement("td");
-    event.textContent = row.event;
-    const actor = document.createElement("td");
-    actor.textContent = row.actor;
-    const name = document.createElement("td");
-    name.textContent = row.nameSnapshot ?? "";
-    tr.append(ts, event, actor, name);
-    tbody.appendChild(tr);
+    const tr = el("tr");
+    tr.append(
+      el("td", "muted", formatStamp(row.ts)),
+      el("td", null, row.event),
+      el("td", null, row.actor),
+      el("td", null, row.nameSnapshot ?? ""),
+    );
+    tbody.append(tr);
   }
 }
 
-// ---------------------------------------------------------------- 备份 / 导入
+// ---------------------------------------------------------------- ⑤ 批量导入
 
-function renderToolsReset() {
-  $("import-result").textContent = "";
-  $("backup-result").textContent = "";
-}
-
-$("import-submit").addEventListener("click", async () => {
+async function submitImport() {
   const text = $("import-text").value;
-  if (!text.trim()) return;
-  $("import-submit").disabled = true;
-  const tags = $("import-tags").value.split(",").map((t) => t.trim()).filter(Boolean);
-  const summary = await send("import-text", { text, tags });
-  $("import-submit").disabled = false;
-  const skipped = summary.skipped?.length ?? 0;
-  $("import-result").textContent =
-    `新建 ${summary.created ?? 0} · 去重 ${summary.deduped ?? 0} · 跳过 ${skipped}` +
-    (skipped ? `（如 ${summary.skipped[0].platform}）` : "");
-  $("import-text").value = "";
-});
+  const resultEl = $("import-result");
+  resultEl.textContent = "";
+  if (!text.trim()) {
+    resultEl.textContent = "没有可导入的内容";
+    return;
+  }
+  const button = $("import-submit");
+  button.disabled = true;
+  try {
+    const summary = await send("import-text", {
+      text,
+      tags: parseTagList($("import-tags").value),
+    });
+    if (!summary || summary.error) {
+      resultEl.textContent = `导入失败：${summary?.error ?? "background 无响应"}`;
+      return;
+    }
+    // skipped 不含值：只有平台/置信度/掩码预览（C1#20）
+    resultEl.textContent = formatImportResult(summary);
+    $("import-text").value = "";
+  } finally {
+    button.disabled = false;
+  }
+  await refresh();
+}
 
-$("export-btn").addEventListener("click", async () => {
-  const password = $("backup-password").value;
-  if (password.length < 8) {
-    $("backup-result").textContent = "备份口令至少 8 位";
-    return;
-  }
-  const response = await send("export-backup", { password });
-  if (response.error) {
-    $("backup-result").textContent = "导出失败：" + response.error;
-    return;
-  }
-  const blob = new Blob([response.blob], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
+// ---------------------------------------------------------------- ⑥ 备份恢复
+
+function backupFileName() {
+  return `keyvault-backup-${new Date().toISOString().slice(0, 10)}.kvbe1.txt`;
+}
+
+function downloadText(name, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `keyvault-backup-${new Date().toISOString().slice(0, 10)}.kvb.txt`;
+  anchor.download = name;
   anchor.click();
   URL.revokeObjectURL(url);
-  $("backup-result").textContent = "已导出（口令不设恢复——忘了就解不开）";
-});
+}
 
-$("restore-file").addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
+async function exportBackup() {
+  const resultEl = $("backup-result");
+  resultEl.textContent = "";
   const password = $("backup-password").value;
   if (password.length < 8) {
-    $("backup-result").textContent = "先在上方输入备份口令，再选择文件";
+    resultEl.textContent = "备份口令至少 8 位——它是唯一防线";
     return;
   }
-  const blob = await file.text();
-  const summary = await send("restore-backup", { password, blob });
-  if (summary.error) {
-    $("backup-result").textContent = "恢复失败：" + summary.error;
+  if (password !== $("backup-password2").value) {
+    resultEl.textContent = "两次输入的口令不一致";
     return;
   }
-  $("backup-result").textContent =
-    `恢复完成：新建 ${summary.created} · 去重 ${summary.deduped}`;
-});
+  const button = $("backup-export");
+  button.disabled = true;
+  try {
+    const response = await send("export-backup", { password });
+    if (!response || response.error) {
+      resultEl.textContent = `导出失败：${response?.error ?? "background 无响应"}`;
+      return;
+    }
+    downloadText(backupFileName(), response.blob);
+    resultEl.textContent = "已导出到下载。口令丢失无法恢复，请把口令记在别处。";
+    $("backup-password").value = "";
+    $("backup-password2").value = "";
+  } finally {
+    button.disabled = false;
+  }
+}
 
-// ---------------------------------------------------------------- 设置
+async function restoreBackup() {
+  const resultEl = $("restore-result");
+  resultEl.textContent = "";
+  const file = $("restore-file").files[0];
+  const password = $("restore-password").value;
+  if (!file) {
+    resultEl.textContent = "先选择备份文件（KVBE1 文本件）";
+    return;
+  }
+  if (!password) {
+    resultEl.textContent = "先输入备份口令";
+    return;
+  }
+  const button = $("restore-submit");
+  button.disabled = true;
+  try {
+    const blob = await file.text();
+    const summary = await send("restore-backup", { password, blob });
+    if (!summary || summary.error) {
+      resultEl.textContent = `恢复失败：${summary?.error ?? "background 无响应"}`;
+      return;
+    }
+    resultEl.textContent = formatRestoreResult(summary);
+    $("restore-password").value = "";
+    $("restore-file").value = "";
+    $("restore-file-name").textContent = "";
+  } finally {
+    button.disabled = false;
+  }
+  await refresh();
+}
+
+// ---------------------------------------------------------------- ⑦ 设置
 
 async function renderSettings() {
-  const { settings } = await send("get-settings");
-  $("set-autolock").value = String(settings.autoLockMinutes);
+  const response = await send("get-settings");
+  const settings = response?.settings;
+  if (!settings) return;
+  $("set-autolock").value = String(settings.autoLockMinutes ?? 15);
   $("set-capture").checked = Boolean(settings.captureEnabled);
   $("set-ignored").value = (settings.ignoredHosts ?? []).join("\n");
   $("settings-saved").textContent = "";
+  await renderCorrections();
 }
 
-$("settings-save").addEventListener("click", async () => {
-  const patch = {
-    autoLockMinutes: Math.max(0, Math.min(240, Number($("set-autolock").value) || 0)),
-    captureEnabled: $("set-capture").checked,
-    ignoredHosts: $("set-ignored").value.split(/\n+/)
-      .map((s) => s.trim().toLowerCase()).filter(Boolean),
-  };
-  await send("set-settings", { patch });
-  $("settings-saved").textContent = "已保存";
-  setTimeout(() => { $("settings-saved").textContent = ""; }, 2000);
-});
+async function renderCorrections() {
+  const response = await send("corrections");
+  const rows = response?.rows;
+  if (!rows) return;
+  const list = $("corr-rows");
+  list.textContent = "";
+  const empty = $("corr-empty");
+  if (!rows.length) {
+    empty.textContent = "还没有纠正规则";
+    empty.classList.remove("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  for (const row of rows) {
+    const li = el("li", "corr-row");
+    li.append(
+      el("span", "corr-kind", CORRECTION_KIND_LABEL[row.kind] ?? row.kind),
+      el("span", "corr-pattern", `${row.pattern} → ${row.platform}`),
+      el("span", "corr-note muted", row.note ?? ""),
+    );
+    const deleteButton = el("button", "btn ghost small", "删除");
+    deleteButton.addEventListener("click", async () => {
+      deleteButton.disabled = true;
+      try {
+        const reply = await send("delete-correction", { id: row.id });
+        if (reply?.error) {
+          toast(reply.error);
+          return;
+        }
+        toast("已删除纠正规则——相关值恢复原判定");
+        await renderCorrections();
+      } finally {
+        deleteButton.disabled = false;
+      }
+    });
+    li.append(deleteButton);
+    list.append(li);
+  }
+}
 
-$("wipe-btn").addEventListener("click", async () => {
-  if (!confirm("删除浏览器里的全部 KeyVault 数据？此操作不可恢复（先导出备份）！")) return;
-  const { deleteDatabase } = await import("./src/vault/db.js");
-  await deleteDatabase();
-  await chrome.storage.session.clear();
-  location.reload();
-});
+async function saveSettings() {
+  const savedEl = $("settings-saved");
+  const response = await send("set-settings", {
+    patch: {
+      autoLockMinutes: clampAutoLock($("set-autolock").value),
+      captureEnabled: $("set-capture").checked,
+      ignoredHosts: parseHostList($("set-ignored").value),
+    },
+  });
+  if (response?.error) {
+    savedEl.textContent = `保存失败：${response.error}`;
+    return;
+  }
+  savedEl.textContent = "已保存";
+  setTimeout(() => { savedEl.textContent = ""; }, 2000);
+}
+
+/** 整库清除（C1#30）：双门齐 → reset 鉴权消息。口令错被拒且数据完好；
+ * 成功后 background 已删库，整页刷新回到未初始化门。 */
+async function wipeVault() {
+  const resultEl = $("reset-result");
+  resultEl.textContent = "";
+  const gateError = checkResetGates($("reset-password").value, $("reset-confirm").value);
+  if (gateError) {
+    resultEl.textContent = gateError;
+    return;
+  }
+  const button = $("reset-btn");
+  button.disabled = true;
+  try {
+    const response = await send("reset", { password: $("reset-password").value });
+    if (!response || response.error) {
+      resultEl.textContent = `清除被拒绝：${response?.error ?? "background 无响应"}（数据未动）`;
+      return;
+    }
+    $("reset-password").value = "";
+    $("reset-confirm").value = "";
+    location.reload();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------- ⑧ 泄露扫描
+
+function setScanStatus(text, cls = "") {
+  const node = $("scan-status");
+  node.className = `result block ${cls}`;
+  node.textContent = text;
+}
+
+/** 收集待扫文本：二进制（头 8KB 含 \x00）与超 50MB 的跳过并计数，读取失败
+ * 的明确记错——不静默崩。entries = [{file?, handle?, path}]。 */
+async function collectEntries(entries) {
+  const items = [];
+  const readErrors = [];
+  let skippedBinary = 0;
+  let skippedLarge = 0;
+  for (const entry of entries) {
+    try {
+      const file = entry.file ?? (await entry.handle.getFile());
+      if (file.size > MAX_FILE_SIZE) {
+        skippedLarge += 1;
+        continue;
+      }
+      const head = new Uint8Array(await file.slice(0, BINARY_CHECK_SIZE).arrayBuffer());
+      if (isBinaryHead(head)) {
+        skippedBinary += 1;
+        continue;
+      }
+      const text = await file.text();
+      for (const chunk of chunkTextByLines(text, MAX_CONTENT_CHARS)) {
+        items.push({
+          path: entry.path,
+          name: `#${items.length}\u0001${entry.path}\u0001L${chunk.lineOffset + 1}`,
+          lineOffset: chunk.lineOffset,
+          chunk: chunk.content,
+        });
+      }
+    } catch (error) {
+      readErrors.push(`${entry.path} —— 读取失败：${error.message}`);
+    }
+  }
+  return { items, skippedBinary, skippedLarge, readErrors };
+}
+
+// 扫描流水线重入锁：收集+分批是长流程，连点/换文件不应并发两趟
+let scanBusy = false;
+
+async function scanPasted() {
+  if (scanBusy) return;
+  const text = $("scan-paste").value;
+  if (!text.trim()) {
+    setScanStatus("粘贴框是空的", "bad");
+    return;
+  }
+  scanBusy = true;
+  try {
+    const chunks = chunkTextByLines(text, MAX_CONTENT_CHARS);
+    const items = chunks.map((chunk, index) => ({
+      path: "粘贴的文本",
+      name: `#paste-${index}\u0001粘贴的文本\u0001L${chunk.lineOffset + 1}`,
+      lineOffset: chunk.lineOffset,
+      chunk: chunk.content,
+    }));
+    await runScan({ items, skippedBinary: 0, skippedLarge: 0, readErrors: [] });
+  } finally {
+    scanBusy = false;
+  }
+}
+
+async function scanFromSelection(fileList) {
+  if (scanBusy) return;
+  scanBusy = true;
+  try {
+    setScanStatus("读取文件中…");
+    const entries = [...fileList].map((file) => ({
+      file,
+      path: file.webkitRelativePath || file.name,
+    }));
+    await runScan(await collectEntries(entries));
+  } finally {
+    scanBusy = false;
+  }
+}
+
+async function pickDirectoryAndScan() {
+  if (typeof showDirectoryPicker === "function") {
+    try {
+      const dirHandle = await showDirectoryPicker();
+      await scanDirectoryHandle(dirHandle);
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") return; // 用户取消不是错误
+      // 其余错误（权限/环境不支持）落到 webkitdirectory 回退
+    }
+  }
+  $("scan-dir-fallback").click();
+}
+
+/** 递归枚举目录句柄；相对路径以所选目录名为根（对齐桌面命中行显示路径）。 */
+async function walkDirectory(handle, prefix, out) {
+  for await (const entry of handle.values()) {
+    if (entry.kind === "file") {
+      out.push({ handle: entry, path: `${prefix}${entry.name}` });
+    } else {
+      await walkDirectory(entry, `${prefix}${entry.name}/`, out);
+    }
+  }
+}
+
+async function scanDirectoryHandle(dirHandle) {
+  if (scanBusy) return;
+  scanBusy = true;
+  setScanStatus("收集目录文件中…");
+  try {
+    const files = [];
+    await walkDirectory(dirHandle, `${dirHandle.name}/`, files);
+    setScanStatus(`读取文件中…（${files.length} 个文件）`);
+    await runScan(await collectEntries(files));
+  } catch (error) {
+    // 遍历中途失败（句柄权限收回等）：明确报错，不卡在半程也不静默当干净
+    setScanStatus(`目录读取失败：${error.message}`, "bad");
+  } finally {
+    scanBusy = false;
+  }
+}
+
+/** 分批发送（C6）：每批 ≤100 条 / ≤4M 字符，等响应再发下一批；被拒的整批
+ * 逐条记显式错误，其余批次继续——扫得完的扫完，扫不了的明说。 */
+async function runScan(collected) {
+  if (!collected.items.length) {
+    renderScanResults(collected, { batchCount: 0, hits: [], failed: [] });
+    return;
+  }
+  const batches = planScanBatches(collected.items);
+  const hits = [];
+  const failed = [];
+  for (let index = 0; index < batches.length; index++) {
+    const batch = batches[index];
+    setScanStatus(`扫描中… 第 ${index + 1}/${batches.length} 批（共 ${collected.items.length} 条文本）`);
+    const texts = batch.map((item) => ({ name: item.name, content: item.chunk }));
+    const response = await send("scan-texts", { texts });
+    if (!response || response.error) {
+      const reason = response?.error ?? "background 无响应";
+      for (const item of batch) failed.push(`${item.path} —— 本批被拒：${reason}`);
+      continue;
+    }
+    hits.push(...decorateHits(response.hits ?? [], batch));
+  }
+  renderScanResults(collected, { batchCount: batches.length, hits, failed });
+}
+
+function renderScanResults(collected, { batchCount, hits, failed }) {
+  const summary = summarizeScanRun(collected, { batchCount, hits, failed });
+  setScanStatus(summary.statusText, summary.statusCls);
+  renderScanErrors(summary.errors);
+  const tbody = $("scan-rows");
+  tbody.textContent = "";
+  for (const hit of hits) {
+    const tr = el("tr");
+    tr.append(
+      el("td", "preview", hit.path ?? hit.textName),
+      el("td", "muted", String(hit.lineNo ?? "")),
+      el("td", null, hit.name),
+      el("td", "muted", hit.platform),
+      el("td", null, null),
+    );
+    tr.children[4].append(el("span", `st st-${hit.status}`, STATUS_LABEL[hit.status] ?? hit.status));
+    tbody.append(tr);
+  }
+  const empty = $("scan-empty");
+  if (hits.length) {
+    empty.classList.add("hidden");
+  } else {
+    empty.textContent = "未发现库中指纹的泄露";
+    empty.classList.remove("hidden");
+  }
+}
+
+function renderScanErrors(errors) {
+  const box = $("scan-errors");
+  box.textContent = "";
+  if (!errors.length) {
+    box.classList.add("hidden");
+    return;
+  }
+  box.classList.remove("hidden");
+  box.append(el("div", "error-head", `以下 ${errors.length} 项无法扫描：`));
+  for (const line of errors.slice(0, SCAN_ERROR_LIST_CAP)) {
+    box.append(el("div", "error-line", line));
+  }
+  if (errors.length > SCAN_ERROR_LIST_CAP) {
+    box.append(el("div", "error-line", `…另有 ${errors.length - SCAN_ERROR_LIST_CAP} 项未逐条列出`));
+  }
+}
 
 // ---------------------------------------------------------------- 启动
 
-$("add-btn").addEventListener("click", () => showForm({
-  title: "添加密钥", fields: [["值", "value", true], ["名称（可选）", "name"],
-    ["键名（可选）", "keyName"], ["平台（可选）", "platform"]],
-  submit: async (data) => {
-    // 直接 add：平台未给时按检测（无 keyName/主机名多为 unknown，诚实落 unknown）
-    return send("store", {
-      text: data.value, source_url: "", title: "",
+function wireStatic() {
+  for (const button of document.querySelectorAll("#nav button")) {
+    button.addEventListener("click", () => selectTab(button.dataset.tab));
+  }
+  $("lock-btn").addEventListener("click", async () => {
+    await send("lock");
+    await renderGate();
+  });
+  $("gate-password").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") $("gate-submit").click();
+  });
+
+  let searchJob = null;
+  $("search").addEventListener("input", () => {
+    clearTimeout(searchJob);
+    searchJob = setTimeout(() => renderSecrets(), 150);
+  });
+  $("status-filter").addEventListener("change", () => renderSecrets());
+  $("add-btn").addEventListener("click", () => {
+    showForm({
+      title: "添加密钥",
+      controls: [
+        { label: "值", key: "value", password: true },
+        { label: "名称（可选，留空自动命名）", key: "name" },
+        { label: "键名（可选）", key: "keyName" },
+        { label: "平台（可选，留空走检测）", key: "platform" },
+      ],
+      done: (response) => {
+        const base = response.outcome === "created"
+          ? `已添加 ${response.name}`
+          : `已合并到现有记录 ${response.name}`;
+        return response.warning ? `${base}——${response.warning}` : base;
+      },
+      submit: (data) => {
+        const payload = { value: data.value };
+        if (data.name.trim()) payload.name = data.name.trim();
+        if (data.keyName.trim()) payload.keyName = data.keyName.trim();
+        if (data.platform.trim()) payload.platform = data.platform.trim();
+        return send("store-direct", payload);
+      },
     });
-  },
-}));
+  });
 
-$("import-btn").addEventListener("click", () => {
-  document.querySelector('#nav [data-tab="tools"]').click();
-});
+  $("drawer-close").addEventListener("click", () => $("drawer").close());
+  $("drawer").addEventListener("close", () => {
+    openDetailId = null;
+    stopTotp();
+    renderSecrets();
+  });
 
-renderGate();
+  $("audit-refresh").addEventListener("click", () => renderAudit());
+  $("import-submit").addEventListener("click", submitImport);
+  $("backup-export").addEventListener("click", exportBackup);
+  $("restore-file").addEventListener("change", (event) => {
+    $("restore-file-name").textContent = event.target.files[0]?.name ?? "";
+  });
+  $("restore-submit").addEventListener("click", restoreBackup);
+  $("settings-save").addEventListener("click", saveSettings);
+  $("reset-btn").addEventListener("click", wipeVault);
+
+  $("scan-paste-btn").addEventListener("click", scanPasted);
+  $("scan-file").addEventListener("change", (event) => {
+    if (event.target.files.length) scanFromSelection(event.target.files);
+  });
+  $("scan-dir-btn").addEventListener("click", pickDirectoryAndScan);
+  $("scan-dir-fallback").addEventListener("change", (event) => {
+    if (event.target.files.length) scanFromSelection(event.target.files);
+  });
+}
+
+async function boot() {
+  wireStatic();
+  await renderGate();
+}
+
+// 浏览器入口：node --test 直 import 本文件时无 document，不启动 UI——
+// 纯逻辑（分批/切块/双门校验/范围建议等）由此可测。
+if (typeof document !== "undefined") {
+  boot();
+}

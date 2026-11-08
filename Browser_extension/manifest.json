@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
   "name": "KeyVault",
-  "version": "0.3.0",
-  "description": "独立本地密钥保管箱：网页复制的 key 自动检测、像保存密码一样确认入库，浏览器内全功能管理。加密数据只存本机浏览器。",
+  "version": "1.0.0",
+  "minimum_chrome_version": "116",
+  "description": "本地密钥保管箱 KeyVault 的浏览器端：网页复制的密钥本地检测入库，剪贴板 30 秒自动擦除，数据不出本机。",
   "permissions": ["storage", "alarms", "clipboardWrite", "offscreen"],
   "host_permissions": ["<all_urls>"],
   "background": {

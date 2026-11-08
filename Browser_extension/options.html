@@ -1,139 +1,256 @@
 <!doctype html>
+<!-- KeyVault 管理页：八区（①仪表盘 ②密钥表格 ③详情抽屉 ④审计日志 ⑤批量导入
+     ⑥备份恢复 ⑦设置 ⑧泄露扫描）。③详情抽屉由②的行点击唤起（覆盖层，不设
+     独立导航项），导航 7 项 + 抽屉 = 八区齐备。经 manifest options_ui.
+     open_in_tab 以整页打开（manifest 归 app-package）。全部动态内容走
+     textContent（见 options.js），本文件只放静态骨架与文案。 -->
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <title>KeyVault</title>
-  <link rel="stylesheet" href="options.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KeyVault — 管理页</title>
+<link rel="stylesheet" href="options.css">
 </head>
 <body>
+
+<!-- 三态门：未初始化（设主密码）/ 已锁定（解锁）/ background 无响应（重试） -->
+<div id="gate" class="gate hidden">
+  <div class="gate-card">
+    <div class="gate-brand">KeyVault</div>
+    <h1 id="gate-title"></h1>
+    <p id="gate-desc" class="muted small"></p>
+    <input id="gate-password" type="password" autocomplete="current-password" placeholder="主密码">
+    <div id="gate-error" class="error" role="alert"></div>
+    <button id="gate-submit" class="btn primary wide"></button>
+  </div>
+</div>
+
+<div class="app">
   <aside class="sidebar">
-    <div class="brand">
-      <img src="icons/icon.png" alt="" width="30" height="30">
-      <div>
-        <div class="brand-name">KeyVault</div>
-        <div class="brand-sub">独立浏览器保管箱</div>
-      </div>
-    </div>
-    <nav id="nav">
+    <div class="brand">KeyVault<span class="brand-sub">浏览器版管理页</span></div>
+    <nav id="nav" class="nav">
       <button data-tab="dashboard" class="active">仪表盘</button>
-      <button data-tab="secrets">密钥管理</button>
+      <button data-tab="secrets">密钥</button>
       <button data-tab="audit">审计日志</button>
-      <button data-tab="tools">备份 / 导入</button>
+      <button data-tab="import">批量导入</button>
+      <button data-tab="backup">备份恢复</button>
+      <button data-tab="scan">泄露扫描</button>
       <button data-tab="settings">设置</button>
     </nav>
     <div class="sidebar-foot">
-      <span id="foot-dot" class="dot"></span>
-      <span id="foot-text">…</span>
-      <button id="lock-btn" class="ghost hidden">锁定</button>
+      <div id="side-version" class="muted"></div>
+      <div class="hairline"></div>
+      <div class="side-note">详情抽屉：在「密钥」表格点任意一行打开</div>
     </div>
   </aside>
 
-  <main id="main">
-    <div id="gate" class="gate hidden">
-      <div class="card gate-card">
-        <h2 id="gate-title"></h2>
-        <p id="gate-desc" class="muted"></p>
-        <input id="gate-password" type="password" placeholder="主密码（至少 8 位）">
-        <div id="gate-error" class="error"></div>
-        <button id="gate-submit" class="primary"></button>
+  <main class="main">
+    <header class="topbar">
+      <h1 id="page-title">仪表盘</h1>
+      <div class="topbar-right">
+        <span class="pill"><span id="status-dot" class="dot"></span><span id="status-text"></span></span>
+        <button id="lock-btn" class="btn ghost hidden">锁定</button>
       </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ① 仪表盘 -->
+      <section id="tab-dashboard" class="tab">
+        <div class="stat-grid">
+          <div class="stat-card"><div class="num" id="stat-total">–</div><div class="label">全部记录</div></div>
+          <div class="stat-card"><div class="num ok" id="stat-active">–</div><div class="label">启用</div></div>
+          <div class="stat-card"><div class="num warn" id="stat-expiring">–</div><div class="label">30 天内到期</div></div>
+          <div class="stat-card"><div class="num bad" id="stat-flagged">–</div><div class="label">吊销 / 过期</div></div>
+        </div>
+        <div class="card">
+          <h2>平台分布</h2>
+          <p class="muted small">启用中记录按平台计数。过期与吊销的翻转由保管箱自动巡查（service worker 启动与每次解锁时标记过期），无需手动操作。</p>
+          <ul id="platform-list" class="platform-list"></ul>
+        </div>
+      </section>
+
+      <!-- ② 密钥表格 -->
+      <section id="tab-secrets" class="tab hidden">
+        <div class="toolbar">
+          <input id="search" type="search" placeholder="搜索名称 / 平台 / 键名 / 备注 / 来源 / 别名">
+          <select id="status-filter">
+            <option value="">全部状态</option>
+            <option value="active">启用</option>
+            <option value="revoked">已吊销</option>
+            <option value="expired">已过期</option>
+          </select>
+          <button id="add-btn" class="btn primary">添加密钥</button>
+        </div>
+        <div class="card table-card">
+          <table class="table">
+            <thead><tr><th>记录</th><th>平台</th><th>状态</th><th>预览</th><th>更新时间</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <div id="table-empty" class="empty hidden"></div>
+        </div>
+        <p class="muted small">列表只带掩码预览，永不携带明文与密文；点击行打开详情抽屉。</p>
+      </section>
+
+      <!-- ④ 审计日志 -->
+      <section id="tab-audit" class="tab hidden">
+        <div class="toolbar">
+          <div id="audit-chain" class="chain-line"></div>
+          <button id="audit-refresh" class="btn ghost">刷新</button>
+        </div>
+        <div class="card table-card">
+          <table class="table">
+            <thead><tr><th>时间</th><th>事件</th><th>操作者</th><th>名称快照</th></tr></thead>
+            <tbody id="audit-rows"></tbody>
+          </table>
+          <div id="audit-empty" class="empty hidden"></div>
+        </div>
+        <p class="muted small">审计只追加；sha 前缀 12 位、不含明文。页面打开即整链复算校验。</p>
+      </section>
+
+      <!-- ⑤ 批量导入 -->
+      <section id="tab-import" class="tab hidden">
+        <div class="card">
+          <h2>批量导入</h2>
+          <p class="muted small">粘贴 .env / JSON / curl 文本。只入可信候选；不可信的进「跳过」（只有掩码预览，不含值）。标签逗号分隔，可选。</p>
+          <textarea id="import-text" rows="10" placeholder="OPENAI_API_KEY=sk-…&#10;DEEPSEEK_BASE_URL=https://api.deepseek.com&#10;GITHUB_TOKEN=ghp_…"></textarea>
+          <div class="form-row">
+            <label for="import-tags">标签</label>
+            <input id="import-tags" type="text" placeholder="work, prod">
+          </div>
+          <div class="row-actions">
+            <button id="import-submit" class="btn primary">导入</button>
+            <span id="import-result" class="result"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ⑥ 备份恢复 -->
+      <section id="tab-backup" class="tab hidden">
+        <div class="card">
+          <h2>导出加密备份</h2>
+          <p class="muted small">整库导出为 KVBE1 口令加密文本（PBKDF2 60 万轮 + AES-GCM），下载到本机。口令是唯一防线：丢失无法恢复，弱口令等于没加密。</p>
+          <div class="form-row"><label for="backup-password">备份口令</label><input id="backup-password" type="password" autocomplete="new-password"></div>
+          <div class="form-row"><label for="backup-password2">确认口令</label><input id="backup-password2" type="password" autocomplete="new-password"></div>
+          <div class="row-actions">
+            <button id="backup-export" class="btn primary">导出并下载</button>
+            <span id="backup-result" class="result"></span>
+          </div>
+        </div>
+        <div class="card">
+          <h2>从备份恢复</h2>
+          <p class="muted small">恢复把备份里的记录合并进当前库：重名同值自动跳过，不覆盖已有记录。整库清除后重建：先用同一主密码设置保管箱（回到解锁态），再恢复。</p>
+          <div class="form-row"><label for="restore-password">口令</label><input id="restore-password" type="password" autocomplete="off"></div>
+          <div class="form-row">
+            <label for="restore-file">备份文件</label>
+            <input id="restore-file" type="file">
+            <span id="restore-file-name" class="muted small"></span>
+          </div>
+          <div class="row-actions">
+            <button id="restore-submit" class="btn primary">恢复</button>
+            <span id="restore-result" class="result"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ⑧ 泄露扫描 -->
+      <section id="tab-scan" class="tab hidden">
+        <div class="card">
+          <h2>网页版泄露扫描</h2>
+          <p class="muted small">把库里的全部指纹（含已吊销的旧值）当搜索模式。桌面 kv scan 目录的浏览器等价：只扫描你显式提供的代码，目录遍历与 .git 剪枝由你选择的范围天然替代。分批发送（每批 ≤100 条 / ≤400 万字符），头 8KB 含空字节的二进制与超 50MB 的文件自动跳过并计数，读不了的项目会明确列出。</p>
+          <h3>粘贴代码</h3>
+          <textarea id="scan-paste" rows="8" placeholder="粘贴要检查的代码或配置…"></textarea>
+          <div class="row-actions"><button id="scan-paste-btn" class="btn primary">扫描粘贴文本</button></div>
+          <h3>选择文件</h3>
+          <input id="scan-file" type="file" multiple>
+          <h3>选择目录</h3>
+          <div class="row-actions">
+            <button id="scan-dir-btn" class="btn">选择目录扫描</button>
+            <span class="muted small">优先用浏览器的目录选择；不支持时回退为目录输入（webkitdirectory）。</span>
+          </div>
+          <input id="scan-dir-fallback" type="file" webkitdirectory multiple class="hidden">
+        </div>
+        <div class="card table-card">
+          <div id="scan-status" class="result block">选择一种输入开始扫描。</div>
+          <div id="scan-errors" class="error-list hidden"></div>
+          <table class="table">
+            <thead><tr><th>文件</th><th>行号</th><th>密钥</th><th>平台</th><th>状态</th></tr></thead>
+            <tbody id="scan-rows"></tbody>
+          </table>
+          <div id="scan-empty" class="empty hidden"></div>
+        </div>
+      </section>
+
+      <!-- ⑦ 设置 -->
+      <section id="tab-settings" class="tab hidden">
+        <div class="card">
+          <h2>常规</h2>
+          <div class="form-row">
+            <label for="set-autolock">自动锁定（分钟）</label>
+            <input id="set-autolock" type="number" min="0" max="240">
+            <span class="muted small">0 = 禁用；无操作超过该时长自动锁库。</span>
+          </div>
+          <div class="form-row check-row">
+            <input id="set-capture" type="checkbox">
+            <label for="set-capture">网页表单捕获提示条</label>
+          </div>
+          <div class="form-row col">
+            <label for="set-ignored">忽略站点（每行一个主机名，小写精确匹配）</label>
+            <textarea id="set-ignored" rows="4" placeholder="mail.example.com&#10;intranet.corp"></textarea>
+          </div>
+          <div class="row-actions">
+            <button id="settings-save" class="btn primary">保存设置</button>
+            <span id="settings-saved" class="result"></span>
+          </div>
+        </div>
+        <div class="card">
+          <h2>纠正规则</h2>
+          <p class="muted small">「设为平台」时记住的最窄范围规则。删除后，相应值恢复原判定（例如裸 sk- 回到歧义）。</p>
+          <ul id="corr-rows" class="corr-list"></ul>
+          <div id="corr-empty" class="empty hidden"></div>
+        </div>
+        <div class="card danger-card">
+          <h2>整库清除</h2>
+          <p class="danger-desc">删除本扩展在浏览器里的全部数据：密钥记录、审计链、纠正规则与设置，不可恢复。审计随库消失，导出备份是唯一前置——先去「备份恢复」页导出。</p>
+          <p class="redline">忘记主密码时请用浏览器的清除站点数据功能清除本扩展数据。</p>
+          <div class="form-row"><label for="reset-password">主密码（鉴权门）</label><input id="reset-password" type="password" autocomplete="off"></div>
+          <div class="form-row"><label for="reset-confirm">输入 RESET（二次确认门）</label><input id="reset-confirm" type="text" autocomplete="off" placeholder="RESET"></div>
+          <div class="row-actions">
+            <button id="reset-btn" class="btn danger">整库清除</button>
+            <span id="reset-result" class="result"></span>
+          </div>
+        </div>
+      </section>
+
     </div>
-
-    <section id="tab-dashboard" class="tab hidden">
-      <div class="stat-row" id="stat-cards"></div>
-      <div class="card">
-        <h3>平台分布</h3>
-        <ul id="platform-list" class="platform-list"></ul>
-      </div>
-    </section>
-
-    <section id="tab-secrets" class="tab hidden">
-      <div class="toolbar">
-        <input id="search" type="search" placeholder="搜索名称 / 平台 / 备注">
-        <select id="status-filter">
-          <option value="">全部状态</option>
-          <option value="active">启用</option>
-          <option value="revoked">已吊销</option>
-          <option value="expired">已过期</option>
-        </select>
-        <button id="add-btn" class="primary">添加</button>
-        <button id="import-btn">批量导入</button>
-      </div>
-      <div class="card table-card">
-        <table id="table">
-          <thead>
-            <tr><th>名称</th><th>平台</th><th>状态</th><th>预览</th><th>更新时间</th></tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-        <div id="table-empty" class="empty hidden"></div>
-      </div>
-    </section>
-
-    <section id="tab-audit" class="tab hidden">
-      <div class="toolbar">
-        <span id="chain-state" class="muted"></span>
-        <button id="audit-refresh">刷新</button>
-      </div>
-      <div class="card table-card">
-        <table>
-          <thead><tr><th>时间</th><th>事件</th><th>操作者</th><th>记录</th></tr></thead>
-          <tbody id="audit-rows"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="tab-tools" class="tab hidden">
-      <div class="card">
-        <h3>批量导入（.env / JSON / curl / AWS csv）</h3>
-        <textarea id="import-text" rows="8" placeholder="粘贴多行 .env、一段 JSON、curl 命令或 AWS credentials.csv …"></textarea>
-        <div class="row">
-          <input id="import-tags" placeholder="标签（逗号分隔，可选）">
-          <button id="import-submit" class="primary">解析并入库</button>
-        </div>
-        <div id="import-result" class="muted"></div>
-      </div>
-      <div class="card">
-        <h3>加密备份（口令另设，与主密码无关）</h3>
-        <p class="muted">导出为口令加密的 KVBE1 文件；恢复逐条去重合并。</p>
-        <div class="row">
-          <input id="backup-password" type="password" placeholder="备份口令（至少 8 位）">
-          <button id="export-btn" class="primary">导出备份文件</button>
-          <input id="restore-file" type="file" accept=".kvb,.txt,.bak">
-        </div>
-        <div id="backup-result" class="muted"></div>
-      </div>
-    </section>
-
-    <section id="tab-settings" class="tab hidden">
-      <div class="card">
-        <h3>安全</h3>
-        <label class="field">
-          <span>自动锁定（分钟无操作，0 = 不自动锁）</span>
-          <input id="set-autolock" type="number" min="0" max="240">
-        </label>
-      </div>
-      <div class="card">
-        <h3>捕获</h3>
-        <label class="check">
-          <input id="set-capture" type="checkbox"> 在网页上检测复制的密钥并提示存入
-        </label>
-        <label class="field">
-          <span>忽略的站点（主机名，每行一个）</span>
-          <textarea id="set-ignored" rows="4" placeholder="例如 mail.example.com"></textarea>
-        </label>
-        <button id="settings-save" class="primary">保存设置</button>
-        <span id="settings-saved" class="muted"></span>
-      </div>
-      <div class="card danger-zone">
-        <h3>危险区</h3>
-        <button id="wipe-btn">删除浏览器里的全部数据（vault 与设置）</button>
-      </div>
-    </section>
   </main>
+</div>
 
-  <dialog id="detail"></dialog>
-  <dialog id="form-dialog"></dialog>
-  <script type="module" src="options.js"></script>
+<!-- ③ 详情抽屉：行点击唤起。有意分歧（C9 纪律，review 可指出）：桌面详情窗
+     的「操作历史」节（kv/gui/detail_window.py:33-36）不移植——C1#8 的 get 契约
+     无 history 字段，完整轨迹统一由④审计日志区承担；与桌面自身的指向一致
+     （detail_window.py:36 尾注「完整轨迹见 安全 → 审计日志」）。TOTP 活码为
+     显式入口（「显示验证码」按钮，对齐桌面 open_totp_for_secret：打开详情
+     零 reveal），由 options.js 动态插入。 -->
+<dialog id="drawer" class="drawer">
+  <div class="drawer-head">
+    <div class="drawer-head-main">
+      <h2 id="drawer-title"></h2>
+      <div id="drawer-badges" class="badges"></div>
+      <div id="drawer-hint" class="hint" role="status"></div>
+    </div>
+    <button id="drawer-close" class="btn ghost">关闭</button>
+  </div>
+  <div id="drawer-body" class="drawer-body"></div>
+</dialog>
+
+<!-- 通用小表单（添加 / 轮换 / 重命名 / 设为平台） -->
+<dialog id="form-dialog" class="modal">
+  <div id="form-body"></div>
+</dialog>
+
+<div id="toast" class="toast hidden" role="status"></div>
+
+<script type="module" src="options.js"></script>
 </body>
 </html>
