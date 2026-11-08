@@ -1,10 +1,15 @@
-// 紧凑同步 SHA-256（hex 输出）。
-//
-// ponytail: 检测管线需要同步指纹（去重键），而 WebCrypto 的 digest 是异步的——
-// 为了一个去重键把整条同步解析链改成 async 不值得。这里用 ~40 行纯 JS 实现；
-// vault 层的**真加密**仍然全部走 WebCrypto（见 vault/crypto.js）。
-// 正确性由 tests/masking.test.js 对拍 node:crypto 保证。
+/**
+ * 同步 SHA-256（FIPS 180-4）。
+ *
+ * 为什么不用 WebCrypto：crypto.subtle.digest 是异步的，而指纹、去重键、审计链、
+ * 检测表哈希全部长在同步链路上（CONTRACTS.md C0——detect 无需异步 crypto，
+ * 指纹走这里的同步实现）。真加密仍走 vault 层的 WebCrypto，职责不重叠。
+ *
+ * 输入支持 string 与 Uint8Array。string 一律按 UTF-8 编码——这是与桌面
+ * hashlib.sha256(x.encode("utf-8")) 对齐的唯一换算点。
+ */
 
+// SHA-256 轮常数 K（前 64 个素数的立方根小数部分前 32 位）。
 const K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
   0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
@@ -19,19 +24,21 @@ const K = new Uint32Array([
   0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ]);
 
-function rotr(x, n) {
-  return (x >>> n) | (x << (32 - n));
-}
+const rotr = (x, n) => (x >>> n) | (x << (32 - n));
 
+/** 对字节序列做 SHA-256，返回 8 个 32 位字（大端语义）。 */
 export function sha256Bytes(bytes) {
   const length = bytes.length;
   const bitLength = length * 8;
-  const padded = new Uint8Array((((length + 8) >> 6) + 1) * 64);
+  const hi = Math.floor(bitLength / 0x100000000);
+  const lo = bitLength % 0x100000000;
+  // 填充：原文 + 0x80 + 零 + 8 字节大端位长，总长对齐 64 字节块。
+  const padded = new Uint8Array(Math.ceil((length + 9) / 64) * 64);
   padded.set(bytes);
   padded[length] = 0x80;
   const view = new DataView(padded.buffer);
-  view.setUint32(padded.length - 4, bitLength >>> 0);
-  view.setUint32(padded.length - 8, Math.floor(bitLength / 0x100000000));
+  view.setUint32(padded.length - 8, hi);
+  view.setUint32(padded.length - 4, lo);
 
   const h = new Uint32Array([
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
@@ -40,42 +47,52 @@ export function sha256Bytes(bytes) {
   const w = new Uint32Array(64);
 
   for (let offset = 0; offset < padded.length; offset += 64) {
-    for (let i = 0; i < 16; i++) {
-      w[i] = view.getUint32(offset + i * 4);
-    }
-    for (let i = 16; i < 64; i++) {
+    for (let i = 0; i < 16; i += 1) w[i] = view.getUint32(offset + i * 4);
+    for (let i = 16; i < 64; i += 1) {
       const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
       const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
       w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
     }
-    let [a, b, c, d, e, f, g, hh] = h;
-    for (let i = 0; i < 64; i++) {
-      const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+    let a = h[0];
+    let b = h[1];
+    let c = h[2];
+    let d = h[3];
+    let e = h[4];
+    let f = h[5];
+    let g = h[6];
+    let last = h[7];
+    for (let i = 0; i < 64; i += 1) {
+      const bigS1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
       const ch = (e & f) ^ (~e & g);
-      const t1 = (hh + s1 + ch + K[i] + w[i]) >>> 0;
-      const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const t1 = (last + bigS1 + ch + K[i] + w[i]) >>> 0;
+      const bigS0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
       const maj = (a & b) ^ (a & c) ^ (b & c);
-      const t2 = (s0 + maj) >>> 0;
-      hh = g; g = f; f = e;
+      const t2 = (bigS0 + maj) >>> 0;
+      last = g;
+      g = f;
+      f = e;
       e = (d + t1) >>> 0;
-      d = c; c = b; b = a;
+      d = c;
+      c = b;
+      b = a;
       a = (t1 + t2) >>> 0;
     }
-    h[0] = (h[0] + a) >>> 0; h[1] = (h[1] + b) >>> 0;
-    h[2] = (h[2] + c) >>> 0; h[3] = (h[3] + d) >>> 0;
-    h[4] = (h[4] + e) >>> 0; h[5] = (h[5] + f) >>> 0;
-    h[6] = (h[6] + g) >>> 0; h[7] = (h[7] + hh) >>> 0;
+    h[0] = (h[0] + a) >>> 0;
+    h[1] = (h[1] + b) >>> 0;
+    h[2] = (h[2] + c) >>> 0;
+    h[3] = (h[3] + d) >>> 0;
+    h[4] = (h[4] + e) >>> 0;
+    h[5] = (h[5] + f) >>> 0;
+    h[6] = (h[6] + g) >>> 0;
+    h[7] = (h[7] + last) >>> 0;
   }
-
-  const out = new Uint8Array(32);
-  new DataView(out.buffer).setUint32(0, h[0]);
-  for (let i = 0; i < 8; i++) {
-    new DataView(out.buffer).setUint32(i * 4, h[i]);
-  }
-  return out;
+  return h;
 }
 
-export function sha256Hex(text) {
-  const bytes = new TextEncoder().encode(text);
-  return [...sha256Bytes(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
+/** 同步 SHA-256 摘要的 64 位小写 hex。string 输入按 UTF-8 编码。 */
+export function sha256Hex(input) {
+  const bytes = typeof input === "string" ? new TextEncoder().encode(input) : input;
+  let hex = "";
+  for (const word of sha256Bytes(bytes)) hex += word.toString(16).padStart(8, "0");
+  return hex;
 }

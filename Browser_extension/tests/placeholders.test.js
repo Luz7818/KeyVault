@@ -1,92 +1,145 @@
-// 占位符闸门：22 类占位、哈希形态、键名拒绝清单、连接串豁免顺序。
+/** placeholders.js 闸门测试：占位符拒绝、确定性哈希、键名拒绝清单、可枚举上下文。 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { classify, Context, isNonCredentialKey, isCredentialKeyName } from "../src/core/placeholders.js";
+import {
+  classify, isAcceptable, isNonCredentialKey, isCredentialKeyName,
+  Context, REASON_PLACEHOLDER, REASON_NOT_A_SECRET, REASON_EMPTY, REASON_TOO_LONG,
+  MAX_VALUE_LEN,
+} from "../src/core/placeholders.js";
 
-function reason(value, ctx) {
-  const [code] = classify(value, ctx);
-  return code;
-}
+const HEX32 = "0123456789abcdef0123456789abcdef";
 
-test("真凭据放行（各形态一例）", () => {
-  for (const value of [
-    "sk-abc123_def456ghi789jklmno",                    // 裸 sk-
-    "ghp_" + "A".repeat(36),                          // github
-    "AKIAIOSFODNN7EXAMPLE",                           // aws id（EXAMPLE 结尾也不误杀）
-    "xoxb-123456789-abcdefghij",                      // slack
-    "postgres://admin:s3cret@db.example.com/prod",    // 连接串（真凭据豁免，先于 URL 规则）
-    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.SflKxwRJSM", // JWT
-  ]) {
-    assert.equal(classify(value), null, `应放行：${value}`);
-  }
+test("占位符拒绝：sk- 模板与重复填充", () => {
+  assert.deepEqual(classify("sk-xxxxxxxx"), [REASON_PLACEHOLDER, "sk- 模板"]);
+  assert.deepEqual(classify("sk-your-key-here"), [REASON_PLACEHOLDER, "sk- 模板"]);
+  assert.deepEqual(classify("x".repeat(20)), [REASON_PLACEHOLDER, "重复字符填充"]);
+  assert.deepEqual(classify("0".repeat(16)), [REASON_PLACEHOLDER, "重复字符填充"]);
 });
 
-test("sk- 模板与重复字符填充", () => {
-  assert.equal(reason("sk-xxx"), "placeholder");
-  assert.equal(reason("sk-your-api-key"), "placeholder");
-  assert.equal(reason("xxxx"), "placeholder");
-  assert.equal(reason("********"), "placeholder");
-  assert.equal(reason("00000000"), "placeholder");
+test("占位符拒绝：your-key / change_me / dummy / 中文 / 尖括号", () => {
+  assert.deepEqual(classify("your-api-key-here"), [REASON_PLACEHOLDER, "your-key 模板"]);
+  assert.deepEqual(classify("change_me"), [REASON_PLACEHOLDER, "change_me 模板"]);
+  assert.deepEqual(classify("dummy-value"), [REASON_PLACEHOLDER, "dummy/sample 模板"]);
+  assert.deepEqual(classify("请替换为你的密钥"), [REASON_PLACEHOLDER, "中文占位提示"]);
+  assert.deepEqual(classify("<api-key-here>"), [REASON_PLACEHOLDER, "尖括号占位"]);
+  assert.deepEqual(classify("insert-here"), [REASON_PLACEHOLDER, "insert-here 模板"]);
+  // 模式按声明顺序先命中先胜：尖括号里的 your-api-key 先被 your-key 模板拦下
+  // （与桌面 classify 实测输出逐字一致）。
+  assert.deepEqual(classify("<your-api-key>"), [REASON_PLACEHOLDER, "your-key 模板"]);
 });
 
-test("your-key / changeme / dummy / insert-here 模板", () => {
-  assert.equal(reason("your_api_key_here"), "placeholder");
-  assert.equal(reason("CHANGEME-123"), "placeholder");
-  assert.equal(reason("dummy-token-value-1234"), "placeholder");
-  assert.equal(reason("insert_here_value_123"), "placeholder");
+test("占位符拒绝：变量展开嵌在中间也要拦", () => {
+  assert.deepEqual(classify("${OPENAI_API_KEY}"), [REASON_PLACEHOLDER, "shell 变量展开"]);
+  assert.deepEqual(
+    classify("prefix-${OPENAI_API_KEY}-suffix"),
+    [REASON_PLACEHOLDER, "含 shell 变量展开"],
+  );
+  assert.deepEqual(classify("%MY_API_KEY%"), [REASON_PLACEHOLDER, "含 Windows 环境变量展开"]);
 });
 
-test("中文占位 / 尖括号 / shell 与 Windows 变量展开", () => {
-  assert.equal(reason("请替换为你的密钥"), "placeholder");
-  assert.equal(reason("<your-api-key>"), "placeholder");
-  assert.equal(reason("${OPENAI_API_KEY}"), "placeholder");
-  // 嵌在中间也拦
-  assert.equal(reason("prefix-${OPENAI_API_KEY}"), "placeholder");
-  assert.equal(reason("%API_KEY%1234567890"), "placeholder");
-  assert.equal(reason("$API_KEY_TOKEN_1234"), "placeholder");
+test("占位符拒绝：字面空值、类型标注、裸 URL、example 域名", () => {
+  assert.deepEqual(classify("none"), [REASON_PLACEHOLDER, "字面空值"]);
+  assert.deepEqual(classify("str"), [REASON_PLACEHOLDER, "类型标注"]);
+  assert.deepEqual(classify("https://platform.deepseek.com/api_keys"), [REASON_PLACEHOLDER, "裸 URL（不含凭据）"]);
+  // example 一词先被 dummy/sample 模板拦下（模式顺序与桌面一致，实测对拍过）。
+  assert.deepEqual(classify("https://api.example.com/v1"), [REASON_PLACEHOLDER, "dummy/sample 模板"]);
+  // 类型标注词后面跟着别的字母不是标注（string 不是 str）
+  assert.equal(classify("stringish-token-value-abc"), null);
 });
 
-test("字面空值 / 类型标注 / 裸 URL / example.com", () => {
-  assert.equal(reason("null"), "placeholder");
-  assert.equal(reason("str 1234567890"), "placeholder");  // 类型标注（词边界后接空白）
-  assert.equal(classify("string_value_not_real_1234"), null); // string_ 无词边界 → 不误杀
-  assert.equal(reason("https://api.example.com/v1"), "placeholder");
-  assert.equal(reason("connect https://example.com/x"), "placeholder");
+test("确定性哈希形态拒绝：40/64/128 hex、UUID、纯数字", () => {
+  assert.deepEqual(
+    classify("0123456789abcdef0123456789abcdef01234567"),
+    [REASON_NOT_A_SECRET, "纯哈希形态（40/64/128 位 hex）"],
+  );
+  assert.deepEqual(classify("0123456789abcdef".repeat(4)), [REASON_NOT_A_SECRET, "纯哈希形态（40/64/128 位 hex）"]);
+  assert.deepEqual(classify("550e8400-e29b-41d4-a716-446655440000"), [REASON_NOT_A_SECRET, "UUID 形态"]);
+  assert.deepEqual(classify("1735689600"), [REASON_NOT_A_SECRET, "纯数字"]);
+  // 大写 40 位 hex 不在哈希形态之列（桌面正则无 (?i)，语义逐字一致）
+  assert.equal(classify("0123456789ABCDEF0123456789ABCDEF01234567"), null);
 });
 
-test("哈希形态与 UUID/纯数字", () => {
-  assert.equal(reason("a".repeat(40)), "not-a-secret");
-  assert.equal(reason("b".repeat(64)), "not-a-secret");
-  assert.equal(reason("c".repeat(128)), "not-a-secret");
-  assert.equal(reason("123e4567-e89b-12d3-a456-426614174000"), "not-a-secret");
-  assert.equal(reason("12345678901234567890"), "not-a-secret");
+test("空值与超长拒绝", () => {
+  assert.deepEqual(classify(""), [REASON_EMPTY, "空值"]);
+  assert.deepEqual(classify("   "), [REASON_EMPTY, "空值"]);
+  assert.deepEqual(
+    classify("A".repeat(MAX_VALUE_LEN + 1)),
+    [REASON_TOO_LONG, `超过 ${MAX_VALUE_LEN} 字符，不像凭据`],
+  );
 });
 
-test("可枚举上下文的 hex 串（窄白名单）", () => {
-  const lock = new Context({ path: "web/package-lock.json" });
-  assert.equal(reason("a1b2c3d4e5f60718293a4b5c6d7e8f9a", lock), "not-a-secret");
-  const git = new Context({ path: "repo/.git/objects/ab/cdef" });
-  assert.equal(reason("a1b2c3d4e5f60718293a4b5c6d7e8f9a", git), "not-a-secret");
-  const integrity = new Context({ lineText: "integrity sha256-xyz" });
-  assert.equal(reason("a1b2c3d4e5f60718293a4b5c6d7e8f9a", integrity), "not-a-secret");
-  // 同样的 hex 在普通上下文放行（可能是真高德 key）
-  assert.equal(classify("a1b2c3d4e5f60718293a4b5c6d7e8f9a"), null);
+test("键名拒绝清单：明确不是凭据的键名被拒", () => {
+  const ctx = (keyName) => new Context({ keyName });
+  assert.deepEqual(
+    classify("deepseek-chat", ctx("LLM_MODEL")),
+    [REASON_NOT_A_SECRET, "键名 LLM_MODEL 明确不是凭据"],
+  );
+  assert.equal(classify("30", ctx("AMAP_TIMEOUT"))[0], REASON_NOT_A_SECRET);
+  assert.equal(classify("https://api.deepseek.com/v1", ctx("LLM_BASE_URL"))[0], REASON_NOT_A_SECRET);
+  assert.equal(isNonCredentialKey("BASE_URL"), true);
+  assert.equal(isNonCredentialKey("MAX_TOKENS"), true);
+  assert.equal(isNonCredentialKey("DEFAULT_REGION"), true);
 });
 
-test("键名拒绝清单：MODEL/BASE_URL/MAX_TOKENS 拒，AWS_ACCESS_KEY_ID 活", () => {
-  assert.ok(isNonCredentialKey("MODEL"));
-  assert.ok(isNonCredentialKey("LLM_BASE_URL"));
-  assert.ok(isNonCredentialKey("MAX_TOKENS"));
-  assert.ok(isNonCredentialKey("request_timeout"));
-  assert.equal(isNonCredentialKey("AWS_ACCESS_KEY_ID"), false); // 不排 _id$
-  assert.equal(isNonCredentialKey("DEEPSEEK_API_KEY"), false);
-  assert.equal(isCredentialKeyName("AWS_ACCESS_KEY_ID"), true);
+test("键名拒绝清单不误杀：AWS_ACCESS_KEY_ID / SESSION_SECRET / 不认识的键名", () => {
+  // 回归守卫：桌面曾把 _id$ 写进清单，把 AWS_ACCESS_KEY_ID 一起杀了。
+  assert.equal(isNonCredentialKey("AWS_ACCESS_KEY_ID"), false);
+  assert.equal(isNonCredentialKey("SESSION_SECRET"), false);
+  assert.equal(isNonCredentialKey("MY_VENDOR_CREDENTIAL"), false);
+  assert.equal(isNonCredentialKey("OPENAI_API_KEY"), false);
+  const ctx = new Context({ keyName: "AWS_ACCESS_KEY_ID" });
+  assert.equal(classify("AKIAABCDEFGHIJKLMNOP", ctx), null);
+});
+
+test("凭据键名宽松判定：决定块级主机名是否传播", () => {
+  assert.equal(isCredentialKeyName("LLM_API_KEY"), true);
+  assert.equal(isCredentialKeyName("GITLAB_TOKEN"), true);
+  assert.equal(isCredentialKeyName("DATABASE_PASSWORD"), true);
+  assert.equal(isCredentialKeyName("LLM_MODEL"), false);
   assert.equal(isCredentialKeyName("LLM_BASE_URL"), false);
-  assert.equal(reason("value-1234567890", new Context({ keyName: "MODEL" })), "not-a-secret");
+  assert.equal(isCredentialKeyName(null), false);
 });
 
-test("空值与超长", () => {
-  assert.equal(reason("   "), "empty");
-  assert.equal(reason("x".repeat(20001)), "too-long");
+test("连接串豁免必须先于 URL 占位符规则：带密码的 URL 是真凭据", () => {
+  assert.equal(classify("postgres://app_user:secret@db.internal.example:5432/app"), null);
+  assert.equal(classify("https://user:secret@db.example.com/db"), null);
+  // 不带凭据的 URL 才是「裸 URL」占位符。
+  assert.equal(classify("https://db.example.com/db")[0], REASON_PLACEHOLDER);
+});
+
+test("可枚举上下文：.git/ 内、锁文件、integrity 行内的 hex 不是凭据", () => {
+  assert.deepEqual(
+    classify(HEX32, new Context({ path: "repo/.git/index" })),
+    [REASON_NOT_A_SECRET, "可枚举上下文里的 hex 串（index）"], // 说明里是 file_name，与桌面一致
+  );
+  assert.equal(
+    classify(HEX32, new Context({ path: "app/package-lock.json" }))[0],
+    REASON_NOT_A_SECRET,
+  );
+  assert.equal(
+    classify(HEX32, new Context({ path: "C:\\repo\\.git\\logs", lineText: "" }))[0],
+    REASON_NOT_A_SECRET,
+  );
+  assert.equal(
+    classify(HEX32, new Context({ lineText: 'integrity "sha512-abc"' }))[0],
+    REASON_NOT_A_SECRET,
+  );
+  // 白名单必须窄：普通上下文里的 hex-32 放行（那是潜在的真高德 Key）。
+  assert.equal(classify(HEX32, new Context({ lineText: "API_KEY=..." })), null);
+  assert.equal(classify(HEX32, new Context({ path: "src/config.py" })), null);
+});
+
+test("Context：file_name 与路径归一", () => {
+  assert.equal(new Context({ path: "a/b/package.json" }).fileName, "package.json");
+  assert.equal(new Context({ path: "a\\b\\yarn.lock" }).fileName, "yarn.lock");
+  assert.equal(new Context({}).fileName, "");
+  assert.equal(new Context({ path: "x/.git/config" }).inDotGit(), true);
+  assert.equal(new Context({ path: "x/.github/workflows" }).inDotGit(), false);
+});
+
+test("isAcceptable 与 classify 一致", () => {
+  assert.equal(isAcceptable("sk-abcdefgh12345678"), true);
+  assert.equal(isAcceptable("sk-xxxxxxxx"), false);
+  assert.equal(isAcceptable("", null), false);
 });

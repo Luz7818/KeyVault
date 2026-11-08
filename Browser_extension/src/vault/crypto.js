@@ -1,16 +1,18 @@
 // vault 加密层 —— WebCrypto：PBKDF2(SHA-256, 600k) 派生 AES-GCM-256。
 //
-// 与桌面版的对位：DPAPI 不可移植（浏览器沙箱无 ctypes），主密码是唯一防线——
-// 这正是桌面版 .kvb 备份的同款信任模型（口令派生 + 认证加密），只是常态加密
-// 也用它（DPAPI 的「当前 Windows 账户」角色由浏览器配置文件身份承担）。
+// 与桌面版的对位：kv/crypto/dpapi.py 的 DPAPI 不可移植（浏览器沙箱无 ctypes），
+// 主密码派生 + 认证加密正是桌面 .kvb 备份（kv/ops/backup.py）的同款信任模型，
+// 只是浏览器把这套用在常态加密上——DPAPI 里「当前 Windows 账户」的角色由
+// 浏览器配置文件身份承担。零外部依赖，加解密全走 globalThis.crypto。
 //
-// keyStore 抽象：解锁后的**原始密钥字节**只存在会话级内存（MV3 下是
-// chrome.storage.session——浏览器会话结束即清空，锁定=删除）。测试用 Map 替身。
+// keyStore 抽象：解锁后的**原始密钥字节**只存调用方注入的 keyStore
+// （MV3 = chrome.storage.session——浏览器会话结束即清空，锁定=删除；
+// 测试 = 内存 Map，见 memoryKeyStore()）。本文件不 import chrome.*。
 
-const KDF_ITERATIONS = 600000;
-const KDF_SALT_BYTES = 16;
-const KEY_BITS = 256;
-const IV_BYTES = 12;
+export const KDF_ITERATIONS = 600000;
+export const KDF_SALT_BYTES = 16;
+export const KEY_BITS = 256;
+export const IV_BYTES = 12;
 
 const te = new TextEncoder();
 const td = new TextDecoder();
@@ -20,6 +22,14 @@ function subtle() {
     throw new Error("WebCrypto 不可用（需要安全上下文）");
   }
   return globalThis.crypto.subtle;
+}
+
+/** 未解锁就碰密钥的统一错误。background 按 name 判定并翻译成 {locked:true}。 */
+export class LockedError extends Error {
+  constructor() {
+    super("vault 已锁定——先解锁");
+    this.name = "LockedError";
+  }
 }
 
 export function randomBytes(n) {
@@ -41,9 +51,8 @@ export function b64ToBytes(b64) {
   return bytes;
 }
 
-/** PBKDF2 派生 32 字节原始密钥。 */
-export async function deriveRawKey(password, saltBytes,
-                                  iterations = KDF_ITERATIONS) {
+/** PBKDF2-SHA256 派生 32 字节原始密钥（600 000 轮、盐 16B 由调用方给）。 */
+export async function deriveRawKey(password, saltBytes, iterations = KDF_ITERATIONS) {
   const baseKey = await subtle().importKey(
     "raw", te.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await subtle().deriveBits(
@@ -71,7 +80,7 @@ export async function decryptBytes(key, { iv, ct }) {
   return new Uint8Array(plain);
 }
 
-export function encryptText(key, text) {
+export async function encryptText(key, text) {
   return encryptBytes(key, te.encode(text));
 }
 
@@ -83,7 +92,7 @@ export async function decryptText(key, box) {
 
 const SESSION_KEY = "kv-vault-raw-key";
 
-/** 解锁后的密钥保存在哪里。SW 传 chrome.storage.session；测试传内存 Map。 */
+/** 解锁后的密钥保存在哪里。SW 传 chrome.storage.session 的壳；测试传内存 Map。 */
 export function memoryKeyStore() {
   const map = new Map();
   return {
@@ -96,7 +105,7 @@ export function memoryKeyStore() {
 export class Session {
   constructor(keyStore) {
     this.keyStore = keyStore;
-    this._key = null; // CryptoKey（SW 生命周期内复用）
+    this._key = null; // CryptoKey（SW 生命周期内复用，省一次 importKey）
   }
 
   /** 会话里还有已解锁的密钥吗（有 raw bytes 就能重建 CryptoKey）。 */
@@ -120,11 +129,7 @@ export class Session {
   async key() {
     if (this._key) return this._key;
     const raw = await this.keyStore.get(SESSION_KEY);
-    if (!raw) {
-      const err = new Error("vault 已锁定——先解锁");
-      err.name = "LockedError";
-      throw err;
-    }
+    if (!raw) throw new LockedError();
     this._key = await importRawKey(b64ToBytes(raw));
     return this._key;
   }
