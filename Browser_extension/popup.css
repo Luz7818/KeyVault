@@ -21,6 +21,16 @@
   --danger: #d64545;
   --row-hover: #eef1f6;
   --shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
+  /* 动效令牌（照 zhishuxing 2.9.0 / Transportation_Harnesss tokens.css 体系）：
+     三缓动 + 四档时长，高频交互一律从阶梯取值，不写散值。
+     强 ease-out 为 UI 默认；屏内移动/变形用 in-out；drawer 曲线留给面板推拉。
+     阶梯语义：按压 --dur-1 < 悬停/焦点 --dur-2 < 入场/弹层 --dur-3 < 抽屉/大面板 --dur-4。
+     2026-11-11 批2 归仓拍板（同 TH 口径）：.15s 悬停/焦点类就近归 --dur-2，
+     .12s 微反馈精确归 --dur-1，.22s 弹层贴梯归 --dur-3(.24s)。 */
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --ease-in-out: cubic-bezier(.77, 0, .175, 1);
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1);
+  --dur-1: .12s; --dur-2: .18s; --dur-3: .24s; --dur-4: .3s;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -116,7 +126,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 7px;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
+  transition: border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
 }
 
 .lock-btn:hover {
@@ -159,7 +169,7 @@ input[type="search"] {
   border: 1px solid var(--border);
   border-radius: 8px;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
 
 input[type="password"]:focus-visible,
@@ -186,7 +196,7 @@ button {
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--dur-2) var(--ease-out);
 }
 
 .primary:hover {
@@ -241,7 +251,7 @@ button {
   border: 1px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out);
 }
 
 .row:hover {
@@ -333,7 +343,7 @@ button {
   border: 1px solid var(--ok);
   border-radius: 9px;
   box-shadow: var(--shadow);
-  animation: notice-rise 0.18s ease-out;
+  animation: notice-rise var(--dur-2) var(--ease-out);
 }
 
 .notice-error {

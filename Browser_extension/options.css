@@ -29,6 +29,16 @@
   --sidebar-active-bg: #232c40;
   --sidebar-hairline: #242b3b;
   --sidebar-muted: #5d6575;
+  /* 动效令牌（照 zhishuxing 2.9.0 / Transportation_Harnesss tokens.css 体系，
+     与 popup.css 同一套）：三缓动 + 四档时长，高频交互一律从阶梯取值，不写散值。
+     强 ease-out 为 UI 默认；屏内移动/变形用 in-out；drawer 曲线留给面板推拉。
+     阶梯语义：按压 --dur-1 < 悬停/焦点 --dur-2 < 入场/弹层 --dur-3 < 抽屉/大面板 --dur-4。
+     2026-11-11 批2 归仓拍板（同 TH 口径）：.15s 悬停/焦点类就近归 --dur-2，
+     .18s 弹层精确归 --dur-2，.22s 抽屉贴梯归 --dur-3(.24s) 且曲线走 --ease-drawer 档。 */
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --ease-in-out: cubic-bezier(.77, 0, .175, 1);
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1);
+  --dur-1: .12s; --dur-2: .18s; --dur-3: .24s; --dur-4: .3s;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -134,7 +144,7 @@ body {
   border-radius: 8px;
   cursor: pointer;
   position: relative;
-  transition: background .15s, color .15s;
+  transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
 }
 .nav button:hover { color: var(--sidebar-hover-fg); background: rgba(255, 255, 255, .05); }
 .nav button.active { color: #fff; background: var(--sidebar-active-bg); }
@@ -316,7 +326,8 @@ textarea {
   border-radius: 8px;
   padding: 7px 14px;
   cursor: pointer;
-  transition: background .15s, border-color .15s, color .15s, filter .15s;
+  transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out),
+              color var(--dur-2) var(--ease-out), filter var(--dur-2) var(--ease-out);
 }
 .btn:hover { background: var(--hover); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -363,7 +374,7 @@ textarea {
   font-size: 13px;
   max-width: 420px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
-  animation: toast-in .18s ease;
+  animation: toast-in var(--dur-2) var(--ease-out);
 }
 @keyframes toast-in {
   from { transform: translateY(8px); opacity: 0; }
@@ -388,7 +399,7 @@ dialog.drawer {
   color: var(--text);
 }
 dialog.drawer::backdrop { background: rgba(9, 12, 20, .45); }
-dialog.drawer[open] { display: flex; flex-direction: column; animation: drawer-in .22s ease; }
+dialog.drawer[open] { display: flex; flex-direction: column; animation: drawer-in var(--dur-3) var(--ease-drawer); }
 @keyframes drawer-in {
   from { transform: translateX(28px); opacity: .4; }
   to { transform: none; opacity: 1; }
@@ -527,4 +538,13 @@ dialog.modal::backdrop { background: rgba(9, 12, 20, .45); }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .content { padding: 16px 14px 32px; }
   dialog.drawer { width: 100vw; inset: 0; border-left: none; }
+}
+
+/* 与 popup.css:356 成对的 a11y 杀块（深评-KeyVault:85：popup/options 是同一扩展的两页，
+   reduced-motion 策略必须成对） */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
