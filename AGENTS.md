@@ -91,7 +91,7 @@ stdlib 零依赖）；外科手术式改动（不动无关代码，每行改动�
 
 | 项 | 值 | 复核命令 |
 |---|---|---|
-| 测试 | `Ran 659, OK (skipped=2~3)`，0 失败（2026-11-02 实测；skip 数含屏幕遮挡层的环境条件项，随桌面状态 2~3 浮动） | `python -I -m unittest discover -s tests -t .` |
+| 测试 | `Ran 659, OK (skipped=2~5)`，0 失败（2026-11-11 实测；skip 数含屏幕遮挡层与两处剪贴板探针（CLI copy + 宿主 e2e copy）的环境条件项，随桌面状态 2~5 浮动） | `python -I -m unittest discover -s tests -t .` |
 | 金标自测 | `selftest --golden` 全过（92 条） | `python kv.py selftest --golden` |
 | 静态检查 | 无 lint 配置（有意） | — |
 | CI | GitHub Actions（windows-latest：全量 unittest + 金标） | `.github/workflows/ci.yml` |

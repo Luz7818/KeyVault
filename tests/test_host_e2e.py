@@ -102,12 +102,16 @@ class TestHostEndToEnd(unittest.TestCase):
         self.assertEqual(len(listing["rows"]), 1)
         self.assertEqual(listing["rows"][0]["name"], name)
 
-        from kv.capture.clipboard import ClipboardError
+        # copy 在 kv_host.py 子进程里执行，宿主按设计把异常翻译成错误响应帧
+        # （kv/host/service.py 的 handle 通道不允许异常逃逸），测试进程内永远
+        # 捕不到 ClipboardError——try/except 守卫对它要防的环境场景是死代码。
+        # 只能进程内探针预判（对齐 test_cli_m2.TestCopyViaCli 模式）：
+        # OS 拒绝一切剪贴板访问时跳过，而不是误报产品回归。
+        from kv.capture.clipboard import Win32Clipboard
 
-        try:
-            copied = self._ask({"type": "copy", "name": name})
-        except (ClipboardError, OSError):
+        if not Win32Clipboard().write("kv-clipboard-probe", exclude_history=True):
             self.skipTest("剪切板被系统级占用，无法做真复制验证")  # 环境问题不误报
+        copied = self._ask({"type": "copy", "name": name})
         self.assertTrue(copied["ok"])
 
     def test_bad_frame_terminates_with_usage_code(self):
