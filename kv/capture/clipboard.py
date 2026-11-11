@@ -17,6 +17,8 @@ import sys
 import time
 from typing import Protocol
 
+from kv import errors
+
 CF_UNICODETEXT = 13
 GMEM_MOVEABLE = 0x0002
 
@@ -43,8 +45,13 @@ class ClipboardBackend(Protocol):
         """写文本。exclude_history 默认开：把机密挡在 Win+V 与云剪切板之外。"""
 
 
-class ClipboardError(Exception):
-    """剪切板操作失败。不携带任何值。"""
+class ClipboardError(errors.KvError):
+    """剪切板操作失败。不携带任何值。
+
+    归入 KvError 体系（KV4-6）：「剪贴板被占用」是可预期的运营态而非 bug——
+    宿主 service.handle 对 KvError 原样透传 str(exc)（扩展端拿到可读文案、
+    可自愈重试），未归入时只能落进「宿主内部错误」兜底；消息全是静态域内
+    文案，不含值与路径，透传安全（tests/test_errors_redaction.py 钉死）。"""
 
 
 _user32 = None

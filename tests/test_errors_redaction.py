@@ -11,6 +11,7 @@ import unittest
 import tests  # noqa: F401
 
 from kv import errors
+from kv.capture.clipboard import ClipboardError
 
 SECRET = "sk-TOPSECRETVALUE-abcdefghij-0123456789"
 SECRET_B = SECRET.encode()
@@ -61,6 +62,9 @@ class TestErrorMessagesNeverLeak(unittest.TestCase):
         ("RefusedError", lambda: errors.RefusedError(f"识别结果不可信（{errors.descriptor(SECRET_B)}）")),
         ("BackupError", lambda: errors.BackupError("不是有效的 KeyVault 备份文件（.kvb）")),
         ("BackupAuthError", lambda: errors.BackupAuthError("口令错误，或备份文件已被篡改")),
+        # ClipboardError 在 kv.capture.clipboard（KV4-6 归入 KvError 树）：
+        # 消息全静态域内文案，宿主透传给扩展端时不得带值
+        ("ClipboardError", lambda: ClipboardError("写剪切板失败：可能被另一个应用占用，稍后重试")),
     ]
 
     def test_no_error_message_shares_8_chars_with_the_secret(self):

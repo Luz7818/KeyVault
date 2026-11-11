@@ -162,6 +162,22 @@ class TestListCopy(HostServiceTestCase):
         result = service.handle(self.store, {"type": "copy", "name": "ghost"})
         self.assertIn("error", result)
 
+    def test_copy_clipboard_busy_returns_domain_message(self):
+        """KV4-6：ClipboardError 在 KvError 体系内，宿主透传可读文案而非
+        「宿主内部错误」——剪贴板被占用是运营态，扩展端要能据此自愈重试。"""
+        from kv import errors
+        from kv.capture.clipboard import ClipboardError
+
+        self.assertTrue(issubclass(ClipboardError, errors.KvError))
+        self.capture()
+        name = self.approve(self.capture()["results"][0]["inbox_id"])["name"]
+        self.clipboard.write = lambda text, **kw: False  # 模拟 OS 拒绝一切写入
+        response = service.handle(self.store, {"type": "copy", "name": name},
+                                  backend=self.clipboard)
+        self.assertEqual(
+            response, {"error": "写剪切板失败：可能被另一个应用占用，稍后重试"},
+        )
+
 
 class TestUninitializedStore(HostServiceTestCase):
 
