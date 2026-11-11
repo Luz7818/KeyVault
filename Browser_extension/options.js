@@ -1,5 +1,6 @@
 // KeyVault 管理页（options）：八区全功能管理页——①仪表盘 ②密钥表格
-// ③详情抽屉（行点击唤起）④审计日志 ⑤批量导入 ⑥备份恢复 ⑦设置 ⑧泄露扫描。
+// （含密码生成器卡）③详情抽屉（行点击唤起）④审计日志 ⑤批量导入（两步
+// 向导：解析预览 → 勾选确认，逐条 store-direct）⑥备份恢复 ⑦设置 ⑧泄露扫描。
 // 经 manifest 的 options_ui.open_in_tab 以整页打开。
 //
 // 与旧版（git 批4 options.js）的硬缺口修正：
@@ -24,6 +25,10 @@
 // document 探测守卫——node --test 直 import 本文件即可测（tests/app-options.test.js）。
 
 import { PERIOD, parseSeed, generate } from "./src/vault/totp.js";
+import {
+  GENERATOR_DEFAULTS, generate as generatePassword, resolveOptions,
+} from "./src/vault/generator.js";
+import { parseBulk, previewText } from "./src/vault/importers.js";
 import { MAX_TEXTS_PER_CALL, MAX_CONTENT_CHARS, MAX_TOTAL_CHARS } from "./src/vault/scan.js";
 import { suggestCorrectionScope } from "./src/core/corrections.js";
 import { hostsIn } from "./src/core/candidate.js";
@@ -37,6 +42,8 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const BINARY_CHECK_SIZE = 8192;
 // 扫描错误清单最多逐条列出 N 项，其余计数带过
 const SCAN_ERROR_LIST_CAP = 50;
+// 导入文件上限（与 importers.js 的 IMPORT_MAX_CHARS 同量级的 UI 侧闸）
+const IMPORT_FILE_MAX = 2_000_000;
 
 export const STATUS_LABEL = { active: "启用", revoked: "已吊销", expired: "已过期" };
 export const CONFIDENCE_LABEL = {
@@ -932,34 +939,297 @@ async function renderAudit() {
   }
 }
 
-// ---------------------------------------------------------------- ⑤ 批量导入
+// ---------------------------------------------------------------- ⑤ 批量导入（两步向导）
 
-async function submitImport() {
-  const text = $("import-text").value;
+/** 解析格式 → 中文标签（预览区 meta 用）。 */
+export const IMPORT_FORMAT_LABELS = {
+  "bitwarden-csv": "Bitwarden CSV 导出",
+  "bitwarden-json": "Bitwarden JSON 导出",
+  "otpauth-list": "otpauth:// 列表",
+  "kv-text": ".env / 键值文本",
+};
+
+/** 预览行渲染上限：超出部分按解析默认值确认（meta 文案明示），值绝不渲染。 */
+export const WIZARD_PREVIEW_CAP = 200;
+const WIZARD_SKIP_LIST_CAP = 50;
+
+// 向导在途计划：items 里持有原始值（内存，绝不渲染）；确认/取消即清。
+let importPlan = null;
+
+/** 确认步结果汇总文案（node 可测，纯函数）。 */
+export function formatWizardSummary(summary) {
+  const parts = [];
+  if (summary.created) parts.push(`新建 ${summary.created}`);
+  if (summary.deduped) parts.push(`合并已有 ${summary.deduped}`);
+  if (summary.rejected) parts.push(`空值拒绝 ${summary.rejected}`);
+  if (summary.unticked) parts.push(`未勾选跳过 ${summary.unticked}`);
+  if (summary.failed) parts.push(`失败 ${summary.failed}`);
+  return parts.length ? `导入完成：${parts.join("，")}` : "没有条目被导入";
+}
+
+function renderImportPreview() {
+  const plan = importPlan;
+  const tbody = $("import-preview-rows");
+  const meta = $("import-preview-meta");
+  const skippedEl = $("import-skipped");
+  tbody.textContent = "";
+  const shown = plan.items.slice(0, WIZARD_PREVIEW_CAP);
+  for (const item of shown) {
+    const tr = el("tr");
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.checked = true;
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = item.name;
+    nameInput.className = "wizard-name";
+    nameInput.placeholder = "留空自动命名";
+    const platformInput = document.createElement("input");
+    platformInput.type = "text";
+    platformInput.value = item.platform;
+    platformInput.className = "wizard-platform";
+    platformInput.placeholder = item.platform ? "" : "留空走检测";
+    const notes = item.warnings.length ? `（${item.warnings.join("；")}）` : "";
+    tr.append(
+      (() => { const td = el("td"); td.append(check); return td; })(),
+      (() => { const td = el("td"); td.append(nameInput); return td; })(),
+      (() => { const td = el("td"); td.append(platformInput); return td; })(),
+      el("td", "muted", `${previewText(item.value)}${notes}`),
+    );
+    tbody.append(tr);
+  }
+  const extra = plan.items.length > shown.length
+    ? `；预览只列前 ${shown.length} 条，其余按解析默认值确认` : "";
+  meta.textContent = `${IMPORT_FORMAT_LABELS[plan.format] ?? plan.format}：识别 `
+    + `${plan.items.length} 条、跳过 ${plan.skipped.length} 条${extra}`
+    + (plan.truncated ? "；已达单次导入上限，请分批" : "");
+  skippedEl.textContent = "";
+  if (plan.skipped.length) {
+    skippedEl.classList.remove("hidden");
+    skippedEl.append(el("h3", "section-title", `跳过 ${plan.skipped.length} 条（只列预览与原因，不含值）`));
+    const list = el("ul", "corr-list");
+    for (const entry of plan.skipped.slice(0, WIZARD_SKIP_LIST_CAP)) {
+      const li = el("li");
+      li.append(
+        el("span", null, entry.preview || "(无预览)"),
+        el("span", "muted", ` — ${entry.reason}`),
+      );
+      list.append(li);
+    }
+    if (plan.skipped.length > WIZARD_SKIP_LIST_CAP) {
+      list.append(el("li", "muted", `…其余 ${plan.skipped.length - WIZARD_SKIP_LIST_CAP} 条同上`));
+    }
+    skippedEl.append(list);
+  } else {
+    skippedEl.classList.add("hidden");
+  }
+}
+
+/** 第一步：解析预览（textarea 或文件），不落库。 */
+async function parseImport() {
   const resultEl = $("import-result");
   resultEl.textContent = "";
+  const fileInput = $("import-file");
+  let text = $("import-text").value;
+  if (fileInput.files.length) {
+    const file = fileInput.files[0];
+    if (file.size > IMPORT_FILE_MAX) {
+      resultEl.textContent = `文件超过 ${IMPORT_FILE_MAX} 字节上限`;
+      return;
+    }
+    text = await file.text();
+  }
   if (!text.trim()) {
     resultEl.textContent = "没有可导入的内容";
     return;
   }
-  const button = $("import-submit");
+  const button = $("import-parse");
   button.disabled = true;
   try {
-    const summary = await send("import-text", {
-      text,
-      tags: parseTagList($("import-tags").value),
-    });
-    if (!summary || summary.error) {
-      resultEl.textContent = `导入失败：${summary?.error ?? "background 无响应"}`;
+    let plan;
+    try {
+      plan = parseBulk(text); // 纯解析：不落库、不检测（信任闸在第二步勾选 + store-direct）
+    } catch (error) {
+      resultEl.textContent = `解析失败：${error?.message ?? String(error)}`;
       return;
     }
-    // skipped 不含值：只有平台/置信度/掩码预览（C1#20）
-    resultEl.textContent = formatImportResult(summary);
+    if (!plan.items.length && !plan.skipped.length) {
+      resultEl.textContent = "没有识别出可导入的条目";
+      return;
+    }
+    importPlan = { ...plan, tags: parseTagList($("import-tags").value) };
+    $("import-confirm-result").textContent = "";
+    renderImportPreview();
+    $("import-preview-card").classList.remove("hidden");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+/** 第二步确认：逐条 store-direct（显式平台 = 用户拍板 manual；空平台走 SW
+ * 现场检测）。响应二元逐条消化，失败明细只列前 5 条。 */
+async function confirmImport() {
+  const resultEl = $("import-confirm-result");
+  resultEl.textContent = "";
+  if (!importPlan) return;
+  const plan = importPlan;
+  const domRows = [...$("import-preview-rows").querySelectorAll("tr")];
+  const button = $("import-confirm");
+  button.disabled = true;
+  const summary = { total: plan.items.length, created: 0, deduped: 0, rejected: 0, unticked: 0, failed: 0, failures: [] };
+  try {
+    for (let index = 0; index < plan.items.length; index += 1) {
+      const item = plan.items[index];
+      let { name, platform } = item;
+      if (index < domRows.length) {
+        if (!domRows[index].querySelector("input[type=checkbox]").checked) {
+          summary.unticked += 1;
+          continue;
+        }
+        name = domRows[index].querySelector(".wizard-name").value.trim();
+        platform = domRows[index].querySelector(".wizard-platform").value.trim();
+      }
+      const payload = { value: item.value };
+      if (name) payload.name = name;
+      if (item.keyName) payload.keyName = item.keyName;
+      if (platform) payload.platform = platform;
+      if (item.sourceUrl) payload.sourceUrl = item.sourceUrl;
+      if (item.note) payload.note = item.note;
+      if (plan.tags.length) payload.tags = plan.tags;
+      const response = await send("store-direct", payload);
+      if (!response || response.error) {
+        summary.failed += 1;
+        if (summary.failures.length < 5) {
+          summary.failures.push(
+            `${name || item.keyName || "(未命名)"}：${response?.error ?? "background 无响应"}`,
+          );
+        }
+        continue;
+      }
+      if (response.outcome === "created") summary.created += 1;
+      else if (response.outcome === "deduped") summary.deduped += 1;
+      else summary.rejected += 1;
+    }
+    resultEl.textContent = formatWizardSummary(summary)
+      + (summary.failures.length ? `；失败明细：${summary.failures.join("；")}` : "");
+    importPlan = null;
+    $("import-preview-card").classList.add("hidden");
     $("import-text").value = "";
+    $("import-file").value = "";
+    $("import-file-name").textContent = "";
   } finally {
     button.disabled = false;
   }
   await refresh();
+}
+
+function cancelImport() {
+  importPlan = null; // 原始值只活在计划里，取消即丢弃
+  $("import-preview-card").classList.add("hidden");
+  $("import-confirm-result").textContent = "";
+}
+
+// ---------------------------------------------------------------- 生成器（密码）
+
+let generatedPassword = "";
+
+/** 从生成器卡读选项并归一化；非法输入返回错误文案。 */
+function readGeneratorOptions() {
+  return resolveOptions({
+    length: $("gen-length").value,
+    lower: $("gen-lower").checked,
+    upper: $("gen-upper").checked,
+    digits: $("gen-digits").checked,
+    symbols: $("gen-symbols").checked,
+    ambiguousOff: $("gen-ambiguous").checked,
+  });
+}
+
+async function runGenerate() {
+  const resultEl = $("gen-result");
+  resultEl.textContent = "";
+  let options;
+  let result;
+  try {
+    options = readGeneratorOptions();
+    result = generatePassword(options);
+  } catch (error) {
+    resultEl.textContent = `生成失败：${error?.message ?? String(error)}`;
+    return;
+  }
+  generatedPassword = result.password;
+  $("gen-output").textContent = result.password;
+  $("gen-strength").textContent = `约 ${result.entropyBits} 比特（粗估）`;
+  $("gen-copy").disabled = false;
+  $("gen-save").disabled = false;
+  // 记住上次选择：settings.generator 走 C7（锁定态也可写——settings 在
+  // backend meta，不碰 session）。失败不打断生成，只提示。
+  const response = await send("set-settings", { patch: { generator: options } });
+  if (response?.error) {
+    resultEl.textContent = `已生成；默认值保存失败：${response.error}`;
+  }
+}
+
+/** 复制生成的密码 → 30s TTL 擦除通道（与 popup 复制流同一条 C1#11 链路）。 */
+async function copyGenerated() {
+  if (!generatedPassword) return;
+  try {
+    await navigator.clipboard.writeText(generatedPassword);
+  } catch (_) {
+    $("gen-result").textContent = "复制失败（剪贴板不可用）";
+    return;
+  }
+  const copied = await send("copied");
+  $("gen-result").textContent = copied?.ok
+    ? `已复制，${copied.ttl} 秒后自动覆盖剪贴板（无法排除系统剪贴板历史）`
+    : "已复制，但 30 秒自动擦除安排失败";
+}
+
+/** 生成的密码是随机串，检测器不认识——存入必须显式平台（manual 语义）。 */
+function saveGenerated() {
+  if (!generatedPassword) return;
+  showForm({
+    title: "把生成的密码存入库",
+    controls: [
+      { label: "值", key: "value", password: true, initial: generatedPassword },
+      { label: "名称（可选，留空自动命名）", key: "name" },
+      { label: "键名（可选）", key: "keyName" },
+      { label: "平台（必填，如 github.com）", key: "platform" },
+    ],
+    done: (response) => {
+      const base = response.outcome === "created"
+        ? `已添加 ${response.name}`
+        : `已合并到现有记录 ${response.name}`;
+      return response.warning ? `${base}——${response.warning}` : base;
+    },
+    submit: (data) => {
+      const payload = { value: data.value };
+      if (data.name.trim()) payload.name = data.name.trim();
+      if (data.keyName.trim()) payload.keyName = data.keyName.trim();
+      if (data.platform.trim()) payload.platform = data.platform.trim();
+      if (!payload.platform) {
+        return { error: "生成的密码是随机串，检测器不认识——请填平台（如 github.com）" };
+      }
+      return send("store-direct", payload);
+    },
+  });
+}
+
+/** 启动时回填上次生成器选择（settings.generator；读不到用默认）。 */
+async function loadGeneratorDefaults() {
+  const response = await send("get-settings");
+  let options = GENERATOR_DEFAULTS;
+  try {
+    options = resolveOptions(response?.settings?.generator);
+  } catch (_) {
+    /* settings 缺失/损坏 → 默认 */
+  }
+  $("gen-length").value = String(options.length);
+  $("gen-lower").checked = options.lower;
+  $("gen-upper").checked = options.upper;
+  $("gen-digits").checked = options.digits;
+  $("gen-symbols").checked = options.symbols;
+  $("gen-ambiguous").checked = options.ambiguousOff;
 }
 
 // ---------------------------------------------------------------- ⑥ 备份恢复
@@ -1381,7 +1651,15 @@ function wireStatic() {
   });
 
   $("audit-refresh").addEventListener("click", () => renderAudit());
-  $("import-submit").addEventListener("click", submitImport);
+  $("import-parse").addEventListener("click", parseImport);
+  $("import-confirm").addEventListener("click", () => confirmImport());
+  $("import-cancel").addEventListener("click", cancelImport);
+  $("import-file").addEventListener("change", (event) => {
+    $("import-file-name").textContent = event.target.files[0]?.name ?? "";
+  });
+  $("gen-generate").addEventListener("click", runGenerate);
+  $("gen-copy").addEventListener("click", copyGenerated);
+  $("gen-save").addEventListener("click", saveGenerated);
   $("backup-export").addEventListener("click", exportBackup);
   $("restore-file").addEventListener("change", (event) => {
     $("restore-file-name").textContent = event.target.files[0]?.name ?? "";
@@ -1402,6 +1680,7 @@ function wireStatic() {
 
 async function boot() {
   wireStatic();
+  void loadGeneratorDefaults(); // 生成器默认值回填（settings 在锁定态也可读）
   await renderGate();
 }
 

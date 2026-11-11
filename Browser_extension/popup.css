@@ -369,3 +369,51 @@ button {
     transition: none !important;
   }
 }
+
+/* ---------------------------------------------------------------- 生成器（功能批） */
+
+.gen-open {
+  width: 100%;
+  margin-top: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.gen-open:hover { background: var(--row-hover); color: var(--fg); }
+
+.gen-panel {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gen-panel[hidden] { display: none; }
+
+.gen-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gen-field { display: flex; align-items: center; gap: 5px; color: var(--fg-muted); font-size: 12.5px; }
+.gen-field input { width: 56px; }
+.gen-check { display: flex; align-items: center; gap: 4px; color: var(--fg-muted); font-size: 12.5px; }
+.gen-check input { accent-color: var(--accent); }
+
+.gen-output {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  word-break: break-all;
+  user-select: all;
+  color: var(--fg);
+  min-height: 1em;
+}
+.gen-strength { margin: 0; font-size: 11.5px; color: var(--fg-muted); }
+
+.gen-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.gen-save-form { display: flex; flex-direction: column; gap: 8px; }
+.gen-save-form[hidden] { display: none; }

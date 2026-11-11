@@ -188,7 +188,10 @@ describe("模块装配（C1 信封与接线）", () => {
     assert.deepEqual(await handleMessage({ kind: "status" }), {
       initialized: false,
       unlocked: false,
-      settings: { autoLockMinutes: 15, captureEnabled: true, ignoredHosts: [] },
+      settings: {
+        autoLockMinutes: 15, captureEnabled: true, ignoredHosts: [],
+        generator: { length: 20, lower: true, upper: true, digits: true, symbols: true, ambiguousOff: true },
+      },
       version: "1.0.0",
     });
   });
@@ -667,7 +670,34 @@ describe("批量导入、扫描与统计（C1#20/22/23/28）", () => {
 
   it("get-settings：{settings} 与默认合并形状", async () => {
     const { settings } = await handleMessage({ kind: "get-settings" });
-    assert.deepEqual(settings, { autoLockMinutes: 15, captureEnabled: true, ignoredHosts: [] });
+    assert.deepEqual(settings, {
+      autoLockMinutes: 15, captureEnabled: true, ignoredHosts: [],
+      generator: { length: 20, lower: true, upper: true, digits: true, symbols: true, ambiguousOff: true },
+    });
+  });
+
+  it("set-settings：generator 合法补丁生效，非法值拒绝（拒绝而非静默收敛）", async () => {
+    const good = await handleMessage({
+      kind: "set-settings", patch: { generator: { length: 32, symbols: false } },
+    });
+    assert.equal(good.ok, true);
+    assert.equal(good.settings.generator.length, 32);
+    assert.equal(good.settings.generator.symbols, false);
+    assert.equal(good.settings.generator.lower, true, "未给的布尔位回落默认");
+    assert.deepEqual(
+      (await handleMessage({ kind: "set-settings", patch: { generator: { length: 7 } } })),
+      { error: "generator 设置不合法：长度必须是 8..128 的整数" },
+    );
+    assert.deepEqual(
+      (await handleMessage({ kind: "set-settings", patch: { generator: { lower: "yes" } } })),
+      { error: "generator 设置不合法：选项 lower 必须是布尔值" },
+    );
+    assert.match(
+      (await handleMessage({ kind: "set-settings", patch: { generator: 42 } })).error,
+      /generator 设置不合法/,
+    );
+    // 恢复默认，别影响后续用例的形状断言
+    await handleMessage({ kind: "set-settings", patch: { generator: {} } });
   });
 });
 
@@ -858,6 +888,43 @@ describe("store-direct：手动添加", () => {
     const result = await handleMessage({ kind: "store-direct", value: "hello world" });
     assert.match(result.error, /识别结果不可信，拒绝落盘/);
     assert.equal((await handleMessage({ kind: "list", query: "hello" })).rows.length, 0);
+  });
+
+  it("导入向导附带字段：tags + sourceUrl 落库（生成器/导入批）", async () => {
+    const result = await handleMessage({
+      kind: "store-direct", value: "plain-value-tags-001", name: "tagged-entry",
+      platform: "custom-tool", tags: ["work", "prod", "  "], sourceUrl: "https://example.com/item",
+    });
+    assert.equal(result.outcome, "created");
+    const { record } = await handleMessage({
+      kind: "get", id: (await handleMessage({ kind: "list", query: "tagged-entry" })).rows[0].id,
+    });
+    assert.deepEqual(record.tags, ["work", "prod"], "空白标签被清掉");
+    assert.equal(record.sourceUrl, "https://example.com/item");
+  });
+
+  it("tags 非字符串数组 → 拒绝；sourceUrl 超长 → 拒绝", async () => {
+    assert.match(
+      (await handleMessage({
+        kind: "store-direct", value: "x-tags-bad-001", platform: "misc", tags: "work",
+      })).error, /tags 必须是字符串数组/,
+    );
+    assert.match(
+      (await handleMessage({
+        kind: "store-direct", value: "x-tags-bad-002", platform: "misc",
+        tags: [1, 2],
+      })).error, /tags 必须是字符串数组/,
+    );
+    assert.match(
+      (await handleMessage({
+        kind: "store-direct", value: "x-url-bad-001", platform: "misc",
+        sourceUrl: "https://x.com/" + "a".repeat(2100),
+      })).error, /sourceUrl 超过/,
+    );
+    assert.equal(
+      (await handleMessage({ kind: "list", query: "x-tags-bad" })).rows.length, 0,
+      "被拒请求不落库",
+    );
   });
 });
 

@@ -17,6 +17,7 @@ import { b64ToBytes, LockedError, Session } from "./src/vault/crypto.js";
 import { idbBackend } from "./src/vault/db.js";
 import { memoryBackend } from "./src/vault/memory-backend.js";
 import { detectText } from "./src/vault/detect.js";
+import { GENERATOR_DEFAULTS, resolveOptions as resolveGeneratorOptions } from "./src/vault/generator.js";
 import { scanTexts } from "./src/vault/scan.js";
 import { parseSeed, SeedError, generate as totpGenerate } from "./src/vault/totp.js";
 import * as store from "./src/vault/store.js";
@@ -30,8 +31,14 @@ const PENDING_WIPE_KEY = "kv-pending-wipe";
 const SETTINGS_META_KEY = "settings";
 const OFFSCREEN_URL = "offscreen.html";
 const REVEAL_EVENTS = ["reveal", "copy", "totp"];
-// C7 的默认设置：与 meta 键 "settings" 里存的补丁浅合并
-const DEFAULT_SETTINGS = { autoLockMinutes: 15, captureEnabled: true, ignoredHosts: [] };
+// C7 的默认设置：与 meta 键 "settings" 里存的补丁浅合并。
+// generator 是唯一嵌套对象字段——整体替换（不是逐键合并），归一化在 hSetSettings。
+const DEFAULT_SETTINGS = {
+  autoLockMinutes: 15,
+  captureEnabled: true,
+  ignoredHosts: [],
+  generator: { ...GENERATOR_DEFAULTS },
+};
 
 // C2 单连接纪律：后端实例模块级创建并复用（node 测试无 indexedDB，
 // 自动落到内存后端——IndexedDB 后端的真机行为靠浏览器走查，已声明边界）。
@@ -390,14 +397,15 @@ async function hGetSettings() {
   return { settings: await readSettings() };
 }
 
-/** settings 形状冻结为 C7 的三字段；SW 侧校验与 options 的 clampAutoLock
+/** settings 形状冻结为 C7 的四字段（autoLockMinutes/captureEnabled/ignoredHosts
+ * + generator 默认值，生成器批新增）；SW 侧校验与 options 的 clampAutoLock
  * 同口径（autoLockMinutes = 0..240 整数，0=禁用），但取拒绝而非静默收敛——
  * 非法值让调用方看到 {error}，而不是悄悄把自动锁定关掉。 */
 async function hSetSettings(msg) {
   if (!msg.patch || typeof msg.patch !== "object" || Array.isArray(msg.patch)) {
     return { error: "patch 必须是对象" };
   }
-  const KNOWN_FIELDS = new Set(["autoLockMinutes", "captureEnabled", "ignoredHosts"]);
+  const KNOWN_FIELDS = new Set(["autoLockMinutes", "captureEnabled", "ignoredHosts", "generator"]);
   for (const field of Object.keys(msg.patch)) {
     if (!KNOWN_FIELDS.has(field)) return { error: `未知设置字段：${field}` };
   }
@@ -417,6 +425,17 @@ async function hSetSettings(msg) {
     .map((host) => String(host).trim().toLowerCase())
     .filter((host) => host !== "");
   merged.autoLockMinutes = minutes;
+  // generator 字段复用生成器模块自己的归一化（长度 8..128 整数 + 布尔位），
+  // 单源不重复写第二份校验；非对象（null/数组/标量）直接拒绝
+  if (merged.generator === null || typeof merged.generator !== "object"
+    || Array.isArray(merged.generator)) {
+    return { error: "generator 设置不合法：必须是对象" };
+  }
+  try {
+    merged.generator = resolveGeneratorOptions(merged.generator);
+  } catch (error) {
+    return { error: `generator 设置不合法：${error?.message ?? String(error)}` };
+  }
   await backend.metaSet(SETTINGS_META_KEY, merged);
   return { ok: true, settings: merged };
 }
@@ -430,10 +449,21 @@ async function hStoreDirect(msg) {
   const name = msg.name ?? "";
   const note = msg.note ?? "";
   const keyName = msg.keyName ?? null;
+  // 导入向导附带的可选字段：sourceUrl 进来源列（store.add 的 guardMetadata
+  // 拒绝凭据味内容），tags 进标签。来源上仍与桌面 set-platform 的手动语义一致。
+  const sourceUrl = typeof msg.sourceUrl === "string" ? msg.sourceUrl.trim() : "";
+  if (sourceUrl.length > 2048) return { error: "sourceUrl 超过 2048 字符上限" };
+  let tags = [];
+  if (msg.tags !== undefined) {
+    if (!Array.isArray(msg.tags) || msg.tags.some((tag) => typeof tag !== "string")) {
+      return { error: "tags 必须是字符串数组" };
+    }
+    tags = msg.tags.map((tag) => tag.trim()).filter((tag) => tag !== "");
+  }
   if (msg.platform) {
     // 显式平台 = 用户拍板，对齐 set-platform 的人工语义
     return finishAdd(await store.add(backend, session, {
-      value, name, note, keyName, platform: msg.platform,
+      value, name, note, keyName, platform: msg.platform, sourceUrl, tags,
       confidence: "manual", evidence: "用户在扩展里手动添加", source: "manual",
       origin: "extension", actor: "extension",
     }));
@@ -446,7 +476,7 @@ async function hStoreDirect(msg) {
   }
   const finding = promptable[0];
   return finishAdd(await store.add(backend, session, {
-    value, name, note, keyName: keyName ?? finding.keyName,
+    value, name, note, tags, sourceUrl, keyName: keyName ?? finding.keyName,
     platform: finding.platform, confidence: finding.confidence,
     // C1#29 与 C1#6 同形：detectSource 同样取 "extension"（字段语义分歧同见 hStore 注）
     evidence: finding.evidence, source: "extension", kind: finding.kind,

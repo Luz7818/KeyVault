@@ -32,6 +32,9 @@ import {
   formatImportResult,
   formatRestoreResult,
   summarizeScanRun,
+  formatWizardSummary,
+  IMPORT_FORMAT_LABELS,
+  WIZARD_PREVIEW_CAP,
 } from "../options.js";
 import { MAX_TEXTS_PER_CALL, MAX_CONTENT_CHARS, MAX_TOTAL_CHARS } from "../src/vault/scan.js";
 import { Session, memoryKeyStore } from "../src/vault/crypto.js";
@@ -85,6 +88,21 @@ describe("机械验收（读源文件断言）", () => {
     }
     assert.ok(html.includes('href="options.css"'));
     assert.ok(html.includes('src="options.js"'));
+  });
+
+  it("生成器卡与导入向导两步的 DOM 接线齐备（生成器/导入功能批）", () => {
+    for (const id of [
+      "gen-card", "gen-length", "gen-lower", "gen-upper", "gen-digits", "gen-symbols",
+      "gen-ambiguous", "gen-generate", "gen-output", "gen-strength", "gen-copy", "gen-save",
+      "import-parse", "import-confirm", "import-cancel", "import-file", "import-preview-card",
+      "import-preview-rows", "import-skipped", "import-preview-meta",
+    ]) {
+      assert.ok(html.includes(`id="${id}"`), `缺向导/生成器元素 ${id}`);
+    }
+    // 旧一步式入口必须已被向导替换（入口唯一，防双入口漂移）
+    assert.ok(!html.includes('id="import-submit"'), "旧 import-submit 应已被两步向导替换");
+    assert.ok(source.includes('send("store-direct"'), "确认步走 C1#29 store-direct");
+    assert.ok(source.includes('send("copied")'), "生成密码复制走 30s TTL 擦除通道");
   });
 });
 
@@ -314,6 +332,25 @@ describe("translateChannelError（MV3 通道异常翻译）", () => {
   it("非 Error 值 String 化不抛", () => {
     assert.match(translateChannelError("boom"), /boom/);
     assert.match(translateChannelError(undefined), /消息通道失败/);
+  });
+});
+
+describe("导入向导（两步：解析预览 → 勾选确认，生成器/导入功能批）", () => {
+  it("formatWizardSummary：各计数段齐出，全零 → 没有条目被导入", () => {
+    assert.equal(
+      formatWizardSummary({ created: 3, deduped: 1, rejected: 0, unticked: 2, failed: 1 }),
+      "导入完成：新建 3，合并已有 1，未勾选跳过 2，失败 1",
+    );
+    assert.equal(formatWizardSummary({ created: 0, deduped: 0, rejected: 0, unticked: 0, failed: 0 }),
+      "没有条目被导入");
+    assert.equal(formatWizardSummary({ rejected: 2 }), "导入完成：空值拒绝 2");
+  });
+
+  it("预览上限 200：超出部分由解析默认值兜底（文案与机械上限一致）", () => {
+    assert.equal(WIZARD_PREVIEW_CAP, 200);
+    assert.equal(IMPORT_FORMAT_LABELS["bitwarden-csv"], "Bitwarden CSV 导出");
+    assert.equal(IMPORT_FORMAT_LABELS["otpauth-list"], "otpauth:// 列表");
+    assert.equal(IMPORT_FORMAT_LABELS["kv-text"], ".env / 键值文本");
   });
 });
 

@@ -17,7 +17,7 @@
 
 ## 文件清单
 
-运行时 27 个文件在 [`make_release.py`](make_release.py) 显式列出，缺一即拒绝
+运行时 29 个文件在 [`make_release.py`](make_release.py) 显式列出，缺一即拒绝
 打包；清单外全是开发期文件。
 
 | 文件 | 干什么 |
@@ -77,8 +77,10 @@
 |---|---|---|
 | 页内捕获 | `content.js` → `background.js` | copy/cut 事件（`isTrusted` 防伪造）→ 8–200 000 字符送检 → 恰一条可信候选弹 Shadow DOM 提示条（20 条内容指纹去重环）；存入走重新检测去重 |
 | 捕获调度 | `background.js` | 捕获开关、忽略站点；候选绝不驻留 SW 内存（SW 无状态，入库前拿原文重新检测） |
-| 搜索取用 | `popup.js` | 150ms 防抖搜索 → 掩码列表 → 点击复制；复制即安排 30 秒擦除 |
-| 管理页 | `options.js`（八区） | ①仪表盘（统计与平台分布）②密钥表格 ③详情抽屉（TOTP 活码环、指纹历史、轮换/吊销/重命名/设平台/纠正规则）④审计日志（整链复算）⑤批量导入（不可信候选进 skipped 不落盘）⑥KVBE1 备份导出恢复 ⑦设置（自动锁定封顶 240 分钟、捕获开关、忽略站点、整库清除）⑧泄露扫描 |
+| 搜索取用 | `popup.js` | 150ms 防抖搜索 → 掩码列表 → 点击复制；复制即安排 30 秒擦除；「生成密码…」快捷面板（生成 → 复制走擦除通道 / 存入库走 store-direct） |
+| 密码生成器 | `src/vault/generator.js` | `crypto.getRandomValues` + 拒绝采样（无模偏差）；长度 8–128 默认 20、四字符类开关、排除易混淆；每类至少一枚 + 熵粗估；上次选择存 settings.generator（C7 第四字段）；popup 与管理页双入口，存入必须显式平台（随机串检测器不认识，manual 语义） |
+| 管理页 | `options.js`（八区） | ①仪表盘（统计与平台分布）②密钥表格（含密码生成器卡）③详情抽屉（TOTP 活码环、指纹历史、轮换/吊销/重命名/设平台/纠正规则）④审计日志（整链复算）⑤批量导入（两步向导：解析预览 → 勾选确认，逐条 store-direct，不可信候选进 skipped 不落盘）⑥KVBE1 备份导出恢复 ⑦设置（自动锁定封顶 240 分钟、捕获开关、忽略站点、生成器默认、整库清除）⑧泄露扫描 |
+| 导入向导 | `src/vault/importers.js` | Bitwarden CSV / JSON 导出、otpauth:// 列表、.env 文本四种格式（自动识别）；login_totp 列展开为独立 TOTP 条目（`totp.js` 的 otpauth URI 解析）；CSV/JSON 行平台建议取 login_uri 主机名；skipped 只带掩码预览与原因不含值（C1#20） |
 | 泄露扫描 | `options.js` + `scan.js` | 粘贴 / 文件 / 目录三种输入；行界切块 + 贪心分批 + 逐批发送，失败逐条明示；吊销的旧值同样参与匹配 |
 | 剪贴板擦除 | `background.js` + `offscreen.js` | 复制后 30 秒 TTL 到点覆盖剪贴板；页面再次复制即取消（clipboard-changed）；擦除失败宁可不擦不错擦，启动 sweep 补擦 |
 | 两步验证码 | `src/vault/totp.js` | 详情抽屉「显示验证码」显式 reveal，活码每秒重绘、剩 5s 转琥珀 |
@@ -91,15 +93,17 @@ cd Browser_extension
 npm test          # node --test，零依赖
 ```
 
-- 2026-11-12 实测：**17 个测试文件 514 条全绿**（tests 514 / pass 514 / fail 0；
-  2026-11-09 批为 16 文件 504 条，KVX-1 批新增 background-idle 10 条）。
-- `node --check` 全部 37 个 JS（顶层 5 + src 15 + tests 17）语法通过。
+- 2026-11-12 实测（功能批后）：**19 个测试文件 564 条全绿**（tests 564 / pass 564 /
+  fail 0 / skipped 0，suites 88）。沿革：11-09 批 16 文件 504 条 → KVX-1 批
+  background-idle +10 → 本批 generator +13、importers +19、otpauth 向量 +4、
+  app-background/options/popup 补测 +14。
+- `node --check` 全部 41 个 JS（顶层 5 + src 17 + tests 19）语法通过。
 - 金标：`tests/golden.test.js` 直读 `tests/corpus/` 桌面正本 92 条逐条对拍——
   桌面语料任何改动，浏览器侧测试立刻同响。
 - 机械红线有测试钉死：全部 `textContent` 无 `innerHTML`（app-content /
   app-options / app-popup）、禁词表（app-background、app-popup）、
   `package.json` 零依赖（app-package）。
-- 打包：`python -I Browser_extension/make_release.py`（仓根执行）——27 文件
+- 打包：`python -I Browser_extension/make_release.py`（仓根执行）——29 文件
   清单缺失即拒绝、版本单源校验（manifest ↔ package.json）、zip 条目回读校验。
 
 主仓 Python 门禁（`python -I -m unittest discover -s tests -t .`）不受本目录影响：
@@ -187,5 +191,5 @@ node 测试覆盖不到浏览器运行时（IndexedDB、chrome.*、offscreen、S
   别加「缓存候选」类的优化。
 - 擦除失败「宁可不擦不错擦」的语义别改；`COPY_NOTICE` 的「无法排除系统剪贴板
   历史」声明不得删（诚实红线）。
-- `package.json` 保持零依赖（有测试钉死）；`make_release.py` 的 27 文件清单
+- `package.json` 保持零依赖（有测试钉死）；`make_release.py` 的 29 文件清单
   是发布物语义，src 增删文件必须同步清单再打包。

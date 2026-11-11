@@ -548,3 +548,32 @@ dialog.modal::backdrop { background: rgba(9, 12, 20, .45); }
     transition: none !important;
   }
 }
+
+/* ---------------------------------------------------------------- 生成器 + 导入向导（功能批） */
+
+/* 密码生成器：输出串用等宽（对齐 table 数字列的 tabular 习惯），可选中复制 */
+.gen-output {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  word-break: break-all;
+  user-select: all;
+  color: var(--text);
+}
+
+/* 向导预览行内编辑框：窄列里不挤爆表格 */
+#import-preview-rows input[type="text"] {
+  width: 100%;
+  min-width: 120px;
+  font-size: 12.5px;
+  padding: 4px 6px;
+}
+#import-preview-rows input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}
+
+/* 跳过清单与既有纠正规则清单同形（corr-list） */
+#import-skipped { margin-top: 10px; }
+#import-skipped li { display: flex; gap: 6px; flex-wrap: wrap; }

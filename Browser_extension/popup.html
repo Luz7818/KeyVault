@@ -49,12 +49,42 @@
       </form>
     </section>
 
-    <!-- 态三：已解锁 —— 搜索 + 掩码列表 + 点击复制 -->
+    <!-- 态三：已解锁 —— 搜索 + 掩码列表 + 点击复制 + 生成器 -->
     <section id="list-view" hidden>
       <input type="search" id="search" placeholder="搜索名称 / 平台 / 备注…" aria-label="搜索密钥" autocomplete="off" spellcheck="false">
       <p class="list-hint">点击行复制明文；约 30 秒后自动覆盖剪贴板（无法排除系统剪贴板历史）。</p>
       <div class="rows" id="list-rows"></div>
       <p class="list-meta" id="list-meta"></p>
+
+      <button type="button" class="gen-open" id="gen-open">生成密码…</button>
+      <div class="gen-panel" id="gen-panel" hidden>
+        <div class="gen-controls">
+          <label class="gen-field">长度 <input type="number" id="gen-length" min="8" max="128" step="1"></label>
+          <label class="gen-check"><input type="checkbox" id="gen-lower">小写</label>
+          <label class="gen-check"><input type="checkbox" id="gen-upper">大写</label>
+          <label class="gen-check"><input type="checkbox" id="gen-digits">数字</label>
+          <label class="gen-check"><input type="checkbox" id="gen-symbols">符号</label>
+          <label class="gen-check"><input type="checkbox" id="gen-ambiguous">排除易混淆</label>
+        </div>
+        <p class="gen-output" id="gen-output"></p>
+        <p class="gen-strength" id="gen-strength"></p>
+        <div class="gen-actions">
+          <button type="button" class="ghost" id="gen-generate">重新生成</button>
+          <button type="button" class="ghost" id="gen-copy">复制</button>
+          <button type="button" class="ghost" id="gen-save">存入库…</button>
+        </div>
+        <div class="gen-save-form" id="gen-save-form" hidden>
+          <label class="field">
+            <span class="field-label">名称（可选，留空自动命名）</span>
+            <input type="text" id="gen-name" placeholder="如 服务器登录">
+          </label>
+          <label class="field">
+            <span class="field-label">平台（必填，如 github.com）</span>
+            <input type="text" id="gen-platform" placeholder="github.com">
+          </label>
+          <button type="button" class="primary" id="gen-save-confirm">确认存入</button>
+        </div>
+      </div>
     </section>
   </main>
 

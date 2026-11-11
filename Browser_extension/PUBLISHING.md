@@ -12,7 +12,7 @@
   校验两处一致，不一致拒绝打包）。
 - 扩展版本与桌面端（`kv/__init__.py` 单源）**各自独立推进**；桌面端版本在
   桌面发布时按其旧约定统一升档——浏览器扩展发版**不需要**动 `kv/`。
-- 27 个运行时文件清单冻结在 `make_release.py`：src 增删文件必须同步清单，
+- 29 个运行时文件清单冻结在 `make_release.py`：src 增删文件必须同步清单，
   否则发布物缺文件且检测静默失效——这是打包器硬拦的两种失败之一（另一种
   是版本不一致）。
 
@@ -78,7 +78,7 @@
 - [ ] 主仓门禁不受影响：`python -I -m unittest discover -s tests -t .` +
       `python kv.py selftest --golden`
 - [ ] `python -I Browser_extension/make_release.py` 产出新 zip
-      （27 文件清单校验 + 版本单源校验 + zip 条目回读校验，三关全过）
+      （29 文件清单校验 + 版本单源校验 + zip 条目回读校验，三关全过）
 - [ ] 真机走查十步过一遍（`Browser_extension/README.md`「真机走查」节）
 - [ ] 商店上传新版本号 zip（更新已上架项目，不用新建）
 - [ ] 扩展版本改的只是 `manifest.json`（`package.json` 镜像同步）；**不动 `kv/`**

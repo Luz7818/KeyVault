@@ -5,7 +5,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseSeed, generate, SeedError, PERIOD, DIGITS } from "../src/vault/totp.js";
+import { parseSeed, parseOtpauthUri, generate, SeedError, PERIOD, DIGITS } from "../src/vault/totp.js";
 
 const RFC_SEED = new TextEncoder().encode("12345678901234567890");
 // (unix 秒, RFC 6238 附录 B 的 8 位 SHA1 码)
@@ -127,5 +127,44 @@ describe("totp base32 宽容解析", () => {
       assert.equal(error instanceof SeedError, true);
       assert.equal(error.name, "SeedError");
     }
+  });
+});
+
+describe("otpauth:// URI 解析（导入向导 login_totp / 验证器导出同款输入）", () => {
+  const URI = "otpauth://totp/DeepSeek:luna@example.com?secret=JBSWY3DPEHPK3PXP&issuer=DeepSeek";
+
+  it("parseSeed 自动取 secret 参数，与裸种子等价", () => {
+    const canonical = parseSeed("JBSWY3DPEHPK3PXP");
+    assert.deepEqual([...parseSeed(URI)], [...canonical]);
+    // scheme 大小写不敏感；secret 可带空格/连字符/padding（宽容清洗递归生效）
+    assert.deepEqual([...parseSeed(URI.replace("otpauth://", "OTPAUTH://"))], [...canonical]);
+    assert.deepEqual(
+      [...parseSeed("otpauth://totp/x?secret=jbsw%20y3dp-EHPK%203pxp")],
+      [...canonical],
+    );
+  });
+
+  it("parseOtpauthUri 拆出 label / issuer；'Provider:账户' 取账户段", () => {
+    const uri = parseOtpauthUri(URI);
+    assert.equal(uri.secret, "JBSWY3DPEHPK3PXP");
+    assert.equal(uri.issuer, "DeepSeek");
+    assert.equal(uri.label, "luna@example.com");
+    const bare = parseOtpauthUri("otpauth://totp/luna?secret=JBSWY3DPEHPK3PXP");
+    assert.equal(bare.label, "luna");
+    assert.equal(bare.issuer, "");
+  });
+
+  it("缺 secret / 坏 URI → SeedError；非 otpauth 输入返回 null", () => {
+    assert.throws(() => parseSeed("otpauth://totp/x?issuer=NoSeed"), SeedError);
+    assert.throws(() => parseSeed("otpauth://totp/x?secret=ABC1"), SeedError);
+    assert.equal(parseOtpauthUri("JBSWY3DPEHPK3PXP"), null);
+    assert.equal(parseOtpauthUri(""), null);
+    assert.equal(parseOtpauthUri(null), null);
+  });
+
+  it("otpauth 生成的验证码与裸种子一致（同源链路）", async () => {
+    const { code: fromUri } = await generate(parseSeed(URI), at(59));
+    const { code: fromBare } = await generate(parseSeed("JBSWY3DPEHPK3PXP"), at(59));
+    assert.equal(fromUri, fromBare);
   });
 });

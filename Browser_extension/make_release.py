@@ -63,6 +63,8 @@ RUNTIME_FILES: tuple[str, ...] = (
     "src/vault/store.js",
     "src/vault/scan.js",
     "src/vault/detect.js",
+    "src/vault/generator.js",
+    "src/vault/importers.js",
     "src/vault/totp.js",
 )
 

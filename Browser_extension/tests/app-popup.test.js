@@ -72,10 +72,17 @@ const UI_IDS = [
   "lock-button", "setup-form", "setup-password", "setup-confirm", "setup-error",
   "unlock-form", "unlock-password", "unlock-error", "search", "list-rows",
   "list-meta", "notice", "version",
+  // 生成器（生成器/导入功能批）
+  "gen-open", "gen-panel", "gen-length", "gen-lower", "gen-upper", "gen-digits",
+  "gen-symbols", "gen-ambiguous", "gen-output", "gen-strength", "gen-generate",
+  "gen-copy", "gen-save", "gen-save-form", "gen-name", "gen-platform", "gen-save-confirm",
 ];
 
 function makeDocument() {
   const registry = new Map(UI_IDS.map((id) => [id, new FakeEl()]));
+  // 与 popup.html 的 hidden 属性对齐：面板/表单初始收起
+  registry.get("gen-panel").hidden = true;
+  registry.get("gen-save-form").hidden = true;
   return {
     registry,
     getElementById: (id) => registry.get(id) ?? null,
@@ -102,6 +109,23 @@ function makeUi() {
     listMeta: el(),
     notice: el(),
     version: el(),
+    genOpen: el(),
+    genPanel: (() => { const elx = el(); elx.hidden = true; return elx; })(),
+    genLength: el(),
+    genLower: el(),
+    genUpper: el(),
+    genDigits: el(),
+    genSymbols: el(),
+    genAmbiguous: el(),
+    genOutput: el(),
+    genStrength: el(),
+    genGenerate: el(),
+    genCopy: el(),
+    genSave: el(),
+    genSaveForm: (() => { const elx = el(); elx.hidden = true; return elx; })(),
+    genName: el(),
+    genPlatform: el(),
+    genSaveConfirm: el(),
   };
 }
 
@@ -201,6 +225,17 @@ function makeSW(options = {}) {
       case "copied":
         // "copiedResponse" in options：可显式给 undefined 模拟「SW 无响应」
         return "copiedResponse" in options ? options.copiedResponse : { ok: true, ttl: 30 };
+      case "set-settings":
+        // 与真实 hSetSettings 同形的最小校验：patch.generator 收下并记账
+        state.generatorPatches = [...(state.generatorPatches ?? []), msg.patch];
+        return { ok: true, settings: { autoLockMinutes: 15, captureEnabled: true, ignoredHosts: [] } };
+      case "store-direct":
+        // 与真实 C1#29 同形：无平台走检测 → 随机串必被拒；有平台 = 用户拍板
+        if (!msg.platform) {
+          return { error: "识别结果不可信，拒绝落盘——请指定平台，或粘贴带完整上下文的文本" };
+        }
+        state.saved = [...(state.saved ?? []), { name: msg.name, platform: msg.platform }];
+        return { ok: true, outcome: "created", name: msg.name || `saved-${state.saved.length}`, warning: "" };
       default:
         return { error: `未知动作 ${msg.kind}` };
     }
@@ -832,5 +867,130 @@ describe("boot 装配", () => {
   it("boot 默认依赖缺 document 时（node 环境）不装配、可安全 import", async () => {
     // 本文件顶部 import popup.js 时 document 未定义——能走到这里即证明无崩溃。
     assert.equal(typeof boot, "function");
+  });
+
+  it("boot 装配生成器：gen-open 点击开面板并自动生成，输出与擦除通道接上", async () => {
+    const doc = makeDocument();
+    const sw = makeSW();
+    const timers = makeTimers();
+    const clipboard = makeClipboard();
+    boot({ document: doc, send: sw.send, timers, clipboardWrite: clipboard.writeText });
+    await settle();
+    const reg = doc.registry;
+    reg.get("setup-password").value = "long-enough-1";
+    reg.get("setup-confirm").value = "long-enough-1";
+    reg.get("setup-form").dispatch("submit");
+    await settle();
+    reg.get("gen-open").dispatch("click");
+    await settle();
+    assert.equal(reg.get("gen-panel").hidden, false, "面板已展开");
+    const output = reg.get("gen-output").textContent;
+    assert.ok(output.length === 20, `首开自动生成 20 位：${output.length}`);
+    reg.get("gen-copy").dispatch("click");
+    await settle();
+    assert.deepEqual(clipboard.writes, [output], "生成的密码整体写入剪贴板");
+    assert.equal(reg.get("notice").textContent, COPY_NOTICE);
+    assert.ok(sw.calls.some((c) => c.kind === "copied"), "复制走 30s 擦除通道");
+    assert.ok(sw.state.generatorPatches.length >= 1, "生成时记住选项（settings.generator）");
+  });
+});
+
+// ---------------------------------------------------------------- 生成器（生成 → 复制走擦除 / 存入库走 store-direct）
+
+describe("生成器（popup 快捷入口）", () => {
+  async function setupGen({ clipboard } = {}) {
+    const base = await setupList({ clipboard });
+    await base.controller.toggleGen();
+    await settle();
+    return base;
+  }
+
+  it("init 时按 settings.generator 回填控件；首开面板自动生成", async () => {
+    const { controller, ui } = await setupGen();
+    assert.equal(ui.genPanel.hidden, false);
+    assert.equal(ui.genLength.value, "20");
+    assert.equal(ui.genLower.checked, true, "settings 默认回填（makeSW 的 status 未带 generator → 默认）");
+    assert.equal(ui.genAmbiguous.checked, true);
+    assert.equal(ui.genOutput.textContent.length, 20);
+    assert.match(ui.genStrength.textContent, /比特（粗估）/);
+  });
+
+  it("重新生成：长度与字符类生效，set-settings 记住选项", async () => {
+    const { controller, ui, sw } = await setupGen();
+    ui.genLength.value = "32";
+    ui.genSymbols.checked = false;
+    ui.genUpper.checked = false;
+    ui.genDigits.checked = false;
+    ui.genAmbiguous.checked = false;
+    await controller.runGen();
+    const output = ui.genOutput.textContent;
+    assert.equal(output.length, 32);
+    assert.match(output, /^[a-z]+$/, "只开小写：全小写");
+    const patch = sw.state.generatorPatches.at(-1).generator;
+    assert.equal(patch.length, 32);
+    assert.equal(patch.symbols, false);
+  });
+
+  it("全部字符类关掉 → 生成失败走提示条，输出清空态保持", async () => {
+    const { controller, ui } = await setupGen();
+    for (const el of [ui.genLower, ui.genUpper, ui.genDigits, ui.genSymbols]) el.checked = false;
+    await controller.runGen();
+    assert.match(ui.notice.textContent, /至少启用一个字符类/);
+    assert.equal(ui.notice.className, "notice notice-error");
+  });
+
+  it("复制生成的密码：写剪贴板 + copied → COPY_NOTICE（文案红线继承）", async () => {
+    const { controller, ui, sw, clipboard } = await setupGen();
+    await controller.copyGen();
+    assert.deepEqual(clipboard.writes, [ui.genOutput.textContent]);
+    assert.ok(sw.calls.some((c) => c.kind === "copied"));
+    assert.equal(ui.notice.textContent, COPY_NOTICE);
+    assert.ok(ui.notice.textContent.includes("无法排除系统剪贴板历史"));
+  });
+
+  it("复制无 copied 响应 → COPY_WIPE_FAILED（不给虚假承诺）", async () => {
+    const sw2 = makeSW({ copiedResponse: undefined });
+    const setup2 = await setupList({ sw: sw2 });
+    await setup2.controller.toggleGen();
+    await settle();
+    await setup2.controller.copyGen();
+    assert.equal(setup2.ui.notice.textContent, COPY_WIPE_FAILED);
+  });
+
+  it("存入库：平台必填（本地拦截不发消息）；带平台走 store-direct 并刷新列表", async () => {
+    const { controller, ui, sw } = await setupGen();
+    await controller.toggleGenSave();
+    assert.equal(ui.genSaveForm.hidden, false);
+    await controller.confirmGenSave(); // 无平台
+    assert.match(ui.notice.textContent, /请填平台/);
+    assert.equal(sw.calls.some((c) => c.kind === "store-direct"), false, "本地拦截不发消息");
+    ui.genName.value = "我的登录";
+    ui.genPlatform.value = "example.com";
+    const before = listCalls(sw).length;
+    await controller.confirmGenSave();
+    const call = sw.calls.find((c) => c.kind === "store-direct");
+    assert.deepEqual(call, { kind: "store-direct", value: ui.genOutput.textContent, name: "我的登录", platform: "example.com" });
+    assert.equal(ui.genSaveForm.hidden, true, "成功后收起表单");
+    assert.match(ui.notice.textContent, /已存入：/);
+    assert.ok(listCalls(sw).length > before, "存入后刷新列表");
+    assert.deepEqual(sw.state.saved, [{ name: "我的登录", platform: "example.com" }]);
+  });
+
+  it("存入库被 SW 拒绝 → 错误进提示条，表单不收起", async () => {
+    const sw = makeSW();
+    // 先包装再交给 setupList——makeController 捕获的是 sw.send 的当前值
+    const original = sw.send;
+    sw.send = async (msg) => {
+      if (msg.kind === "store-direct") return { error: "同名记录已存在" };
+      return original(msg);
+    };
+    const base = await setupList({ sw });
+    await base.controller.toggleGen();
+    await settle();
+    await base.controller.toggleGenSave();
+    base.ui.genPlatform.value = "example.com";
+    await base.controller.confirmGenSave();
+    assert.equal(base.ui.notice.textContent, "同名记录已存在");
+    assert.equal(base.ui.genSaveForm.hidden, false, "失败不收起，可改后重试");
   });
 });

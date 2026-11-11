@@ -82,6 +82,29 @@
           </select>
           <button id="add-btn" class="btn primary">添加密钥</button>
         </div>
+        <div class="card" id="gen-card">
+          <h2>密码生成器</h2>
+          <p class="muted small">crypto.getRandomValues + 拒绝采样，无模偏差；每个启用的字符类至少一枚。熵为粗估值。长度 8–128。</p>
+          <div class="form-row">
+            <label for="gen-length">长度</label>
+            <input id="gen-length" type="number" min="8" max="128" step="1">
+            <input id="gen-lower" type="checkbox" class="check-inline"><label for="gen-lower">小写</label>
+            <input id="gen-upper" type="checkbox" class="check-inline"><label for="gen-upper">大写</label>
+            <input id="gen-digits" type="checkbox" class="check-inline"><label for="gen-digits">数字</label>
+            <input id="gen-symbols" type="checkbox" class="check-inline"><label for="gen-symbols">符号</label>
+            <input id="gen-ambiguous" type="checkbox" class="check-inline"><label for="gen-ambiguous">排除易混淆（Il1O0o 等）</label>
+          </div>
+          <div class="row-actions">
+            <button id="gen-generate" class="btn primary">生成</button>
+            <span id="gen-output" class="gen-output"></span>
+            <span id="gen-strength" class="muted small"></span>
+          </div>
+          <div class="row-actions">
+            <button id="gen-copy" class="btn ghost" disabled>复制</button>
+            <button id="gen-save" class="btn ghost" disabled>存入库…</button>
+            <span id="gen-result" class="result"></span>
+          </div>
+        </div>
         <div class="card table-card">
           <table class="table">
             <thead><tr><th>记录</th><th>平台</th><th>状态</th><th>预览</th><th>更新时间</th></tr></thead>
@@ -108,19 +131,40 @@
         <p class="muted small">审计只追加；sha 前缀 12 位、不含明文。页面打开即整链复算校验。</p>
       </section>
 
-      <!-- ⑤ 批量导入 -->
+      <!-- ⑤ 批量导入（两步向导：解析预览 → 勾选确认） -->
       <section id="tab-import" class="tab hidden">
         <div class="card">
           <h2>批量导入</h2>
-          <p class="muted small">粘贴 .env / JSON / curl 文本。只入可信候选；不可信的进「跳过」（只有掩码预览，不含值）。标签逗号分隔，可选。</p>
-          <textarea id="import-text" rows="10" placeholder="OPENAI_API_KEY=sk-…&#10;DEEPSEEK_BASE_URL=https://api.deepseek.com&#10;GITHUB_TOKEN=ghp_…"></textarea>
+          <p class="muted small">第一步：粘贴或选文件（Bitwarden CSV / JSON 导出、otpauth:// 列表、.env 文本，格式自动识别），先解析预览不落库。</p>
+          <textarea id="import-text" rows="10" placeholder="Bitwarden 导出 CSV/JSON、otpauth://totp/… 列表，或&#10;OPENAI_API_KEY=sk-…&#10;GITHUB_TOKEN=ghp_…"></textarea>
+          <div class="form-row">
+            <label for="import-file">或选文件（.csv / .json / .txt / .env）</label>
+            <input id="import-file" type="file" accept=".csv,.json,.txt,.env,text/plain,text/csv,application/json">
+            <span id="import-file-name" class="muted small"></span>
+          </div>
           <div class="form-row">
             <label for="import-tags">标签</label>
             <input id="import-tags" type="text" placeholder="work, prod">
           </div>
           <div class="row-actions">
-            <button id="import-submit" class="btn primary">导入</button>
+            <button id="import-parse" class="btn primary">解析预览</button>
             <span id="import-result" class="result"></span>
+          </div>
+        </div>
+        <div class="card hidden" id="import-preview-card">
+          <h2>第二步 · 预览勾选</h2>
+          <p class="muted small" id="import-preview-meta"></p>
+          <div class="card table-card">
+            <table class="table">
+              <thead><tr><th>导入</th><th>名称</th><th>平台（可改；留空走检测）</th><th>预览</th></tr></thead>
+              <tbody id="import-preview-rows"></tbody>
+            </table>
+          </div>
+          <div id="import-skipped" class="hidden"></div>
+          <div class="row-actions">
+            <button id="import-confirm" class="btn primary">确认导入</button>
+            <button id="import-cancel" class="btn ghost">取消</button>
+            <span id="import-confirm-result" class="result"></span>
           </div>
         </div>
       </section>

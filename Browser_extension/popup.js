@@ -20,6 +20,8 @@
 // document）均可注入，浏览器内 boot() 以默认依赖装配；node 测试
 // （tests/app-popup.test.js）用极简替身驱动同一份控制器逻辑。
 
+import { generate as generatePassword, resolveOptions } from "./src/vault/generator.js";
+
 export const DEBOUNCE_MS = 150;
 export const NOTICE_MS = 3000;
 
@@ -151,10 +153,28 @@ export function createController(deps) {
     ui.unlockPassword.focus();
   }
 
+  /** 生成器控件回填：status.settings.generator（C7）→ 控件；缺失/损坏回落默认。
+   * 在 init 拉状态时执行——面板首开即可直接生成，而不是先撞一次「全部未勾选」。 */
+  function prefillGenerator(settings) {
+    let options;
+    try {
+      options = resolveOptions(settings?.generator);
+    } catch (_) {
+      return; // settings 形状损坏：保持控件现状（全关时生成会给明确报错）
+    }
+    ui.genLength.value = String(options.length);
+    ui.genLower.checked = options.lower;
+    ui.genUpper.checked = options.upper;
+    ui.genDigits.checked = options.digits;
+    ui.genSymbols.checked = options.symbols;
+    ui.genAmbiguous.checked = options.ambiguousOff;
+  }
+
   async function renderStatus(status) {
     hideNotice();
     cancelSearchTimer();
     renderFooter(status);
+    prefillGenerator(status.settings);
     const view = deriveView(status);
     showView(view);
     if (view === "setup") {
@@ -339,6 +359,79 @@ export function createController(deps) {
     await attempt(fetchStatus);
   }
 
+  // ---- 生成器（生成 → 复制走 30s 擦除通道 / 存入库走 store-direct） ----
+
+  let generated = "";
+
+  function readGenOptions() {
+    return resolveOptions({
+      length: ui.genLength.value,
+      lower: Boolean(ui.genLower.checked),
+      upper: Boolean(ui.genUpper.checked),
+      digits: Boolean(ui.genDigits.checked),
+      symbols: Boolean(ui.genSymbols.checked),
+      ambiguousOff: Boolean(ui.genAmbiguous.checked),
+    });
+  }
+
+  function toggleGen() {
+    ui.genPanel.hidden = !ui.genPanel.hidden;
+    if (!ui.genPanel.hidden && !generated) return attempt(runGen);
+    return Promise.resolve();
+  }
+
+  async function runGen() {
+    let result;
+    try {
+      result = generatePassword(readGenOptions());
+    } catch (error) {
+      showNotice(`生成失败：${error?.message ?? String(error)}`, true);
+      return;
+    }
+    generated = result.password;
+    ui.genOutput.textContent = generated;
+    ui.genStrength.textContent = `约 ${result.entropyBits} 比特（粗估）`;
+    // 记住上次选择：settings.generator 走 C7（settings 在 backend meta，锁定态也可写）
+    await send({ kind: "set-settings", patch: { generator: readGenOptions() } });
+  }
+
+  async function copyGen() {
+    if (!generated) return;
+    try {
+      await clipboardWrite(generated);
+    } catch (err) {
+      showNotice(`${COPY_FAILED}：${err instanceof Error && err.message ? err.message : ""}`, true);
+      return;
+    }
+    const copied = await send({ kind: "copied" });
+    // 与 copyRow 同一文案红线：无响应/错误 = 擦除没安排上，不给虚假承诺
+    if (!copied || copied.error) showNotice(COPY_WIPE_FAILED, true);
+    else showNotice(COPY_NOTICE);
+  }
+
+  function toggleGenSave() {
+    ui.genSaveForm.hidden = !ui.genSaveForm.hidden;
+  }
+
+  async function confirmGenSave() {
+    const name = ui.genName.value.trim();
+    const platform = ui.genPlatform.value.trim();
+    if (!platform) {
+      showNotice("请填平台（如 github.com）——生成的密码是随机串，检测器不认识", true);
+      return;
+    }
+    const response = await send({ kind: "store-direct", value: generated, name, platform });
+    if (!response || response.error) {
+      showNotice(response?.error ?? NO_RESPONSE, true);
+      return;
+    }
+    ui.genName.value = "";
+    ui.genPlatform.value = "";
+    ui.genSaveForm.hidden = true;
+    showNotice(`已存入：${response.name}`);
+    await attempt(() => refreshList(""));
+  }
+
   // 三个主提交动作统一经 attempt：send reject（扩展上下文失效/通道断）时
   // 以「操作失败：…」提示条反馈，绝不让异常穿透后 UI 毫无反应。
   return {
@@ -348,6 +441,11 @@ export function createController(deps) {
     lock: () => attempt(lock),
     onSearchInput,
     clearSearch,
+    toggleGen,
+    runGen,
+    copyGen,
+    toggleGenSave,
+    confirmGenSave,
   };
 }
 
@@ -372,6 +470,23 @@ function buildUi(doc) {
     listMeta: el("list-meta"),
     notice: el("notice"),
     version: el("version"),
+    genOpen: el("gen-open"),
+    genPanel: el("gen-panel"),
+    genLength: el("gen-length"),
+    genLower: el("gen-lower"),
+    genUpper: el("gen-upper"),
+    genDigits: el("gen-digits"),
+    genSymbols: el("gen-symbols"),
+    genAmbiguous: el("gen-ambiguous"),
+    genOutput: el("gen-output"),
+    genStrength: el("gen-strength"),
+    genGenerate: el("gen-generate"),
+    genCopy: el("gen-copy"),
+    genSave: el("gen-save"),
+    genSaveForm: el("gen-save-form"),
+    genName: el("gen-name"),
+    genPlatform: el("gen-platform"),
+    genSaveConfirm: el("gen-save-confirm"),
   };
 }
 
@@ -425,6 +540,21 @@ export function boot(overrides = {}) {
       event.preventDefault();
       controller.clearSearch();
     }
+  });
+  ui.genOpen.addEventListener("click", () => {
+    void controller.toggleGen();
+  });
+  ui.genGenerate.addEventListener("click", () => {
+    void controller.runGen();
+  });
+  ui.genCopy.addEventListener("click", () => {
+    void controller.copyGen();
+  });
+  ui.genSave.addEventListener("click", () => {
+    controller.toggleGenSave();
+  });
+  ui.genSaveConfirm.addEventListener("click", () => {
+    void controller.confirmGenSave();
   });
   void controller.init();
 }

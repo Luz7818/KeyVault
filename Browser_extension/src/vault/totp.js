@@ -27,9 +27,44 @@ export class SeedError extends Error {
   }
 }
 
-/** 宽容解析 base32：大小写不敏感、忽略空格与连字符、容忍已有 padding。 */
+/** otpauth:// URI 解析（验证器导出的标准形态，导入向导 login_totp 列同源）：
+ * otpauth://totp/<标签>?secret=BASE32&issuer=厂商。
+ * 非 otpauth:// 开头返回 null；开头但缺 secret / 解析失败抛 SeedError。
+ * 标签取路径段（"Provider:luna" → 账户名 "luna"，RFC 6238 风格）；issuer
+ * 参数优先于标签前缀。secret 只取原文，宽容清洗交给 parseSeed。 */
+export function parseOtpauthUri(raw) {
+  const text = String(raw ?? "").trim();
+  if (!/^otpauth:\/\//i.test(text)) return null;
+  const queryStart = text.indexOf("?");
+  const query = queryStart >= 0 ? text.slice(queryStart + 1) : "";
+  const params = new URLSearchParams(query);
+  const secret = (params.get("secret") ?? "").trim();
+  if (!secret) throw new SeedError("otpauth URI 缺少 secret 参数");
+  const issuer = (params.get("issuer") ?? "").trim();
+  let label = "";
+  try {
+    const url = new URL(text);
+    // 非特殊 scheme：otpauth://totp/Label 的 host 是 "totp"，标签在 pathname；
+    // 也有 otpauth://Label?… 的写法（标签落进 host）——两种都认。
+    label = decodeURIComponent(url.pathname.replace(/^\/+/, "")).trim();
+    if (!label && url.host && url.host.toLowerCase() !== "totp") {
+      label = decodeURIComponent(url.host).trim();
+    }
+  } catch (_) {
+    label = ""; // 路径解析不出来不致命：secret 已到手，命名走 fallback
+  }
+  if (label.includes(":")) {
+    label = label.split(":").slice(1).join(":").trim(); // "Provider:luna" → "luna"
+  }
+  return { secret, issuer, label };
+}
+
+/** 宽容解析 base32：大小写不敏感、忽略空格与连字符、容忍已有 padding；
+ * otpauth:// URI 自动取 secret 参数（导入向导与验证器「导出账户」同款输入）。 */
 export function parseSeed(raw) {
-  const cleaned = String(raw ?? "")
+  const uri = parseOtpauthUri(raw);
+  const source = uri ? uri.secret : raw;
+  const cleaned = String(source ?? "")
     .split(/\s+/).join("")
     .split("-").join("")
     .split("=").join("")
