@@ -31,6 +31,7 @@
 | `icons/icon.png` | 扩展图标（与 `packaging/icon.png` 同源整包复用） |
 | `make_release.py` | 零依赖打包脚本（stdlib only，见下「门禁」） |
 | `package.json` | `npm test` 入口（`node --test`）；零依赖、版本镜像 |
+| `CWS.md` / `PRIVACY-POLICY.md` | 商店提审材料定稿：逐权限理由（含 `<all_urls>`）、Privacy 面板逐项、版本发布说明 / 隐私政策发布原文 |
 | `src/` `tests/` | 源码与测试（见下） |
 | `dist/` | 打包产物（zip），不入库 |
 
@@ -172,9 +173,12 @@ node 测试覆盖不到浏览器运行时（IndexedDB、chrome.*、offscreen、S
   正本（`tableHash()` 对拍），本侧不许单方面改规则。
 - **浏览器运行时**：Chrome 116+ 的 MV3 API（service worker / IndexedDB /
   offscreen / alarms / storage.session）；不连任何宿主进程、不连桌面 vault。
-- **改这里之后要跑**：`npm test`（本目录）+ 36 个 JS `node --check` +
+- **改这里之后要跑**：`npm test`（本目录）+ 41 个 JS `node --check` +
   `python -I Browser_extension/make_release.py`（打发布包）；主仓 Python
   门禁不受影响；发布前按上文「真机走查」节在浏览器里手动过一遍。
+- **下游发布链**：[`PUBLISHING.md`](PUBLISHING.md)（渠道与步骤）、
+  [`CWS.md`](CWS.md)（提审材料定稿，权限面变了先改它）、
+  [`PRIVACY-POLICY.md`](PRIVACY-POLICY.md)（隐私政策发布原文）。
 
 ## 别动
 

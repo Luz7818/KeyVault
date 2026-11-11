@@ -3,8 +3,9 @@
 > 用途：让别人能在网上下载安装 KeyVault 浏览器扩展。三条渠道的材料与步骤都在
 > 这份文件，每次发版照着走。打包命令：`python -I Browser_extension/make_release.py`
 > （仓根执行，`-I` 隔离模式）→ 产物 `dist/keyvault-browser-extension-v<版本>.zip`。
-> 2026-11-09 随 v2 重写更新：版本纪律、发版检查单、真机走查条数有变，渠道与
-> 商店材料基本沿旧。
+> 2026-11-12 提审材料定稿：权限理由、隐私政策移入单源
+> [`CWS.md`](CWS.md) / [`PRIVACY-POLICY.md`](PRIVACY-POLICY.md)，商店描述与
+> 功能实况对齐；渠道与步骤沿用 2026-11-09 v2 批的口径。
 
 ## 版本纪律（v2 起与桌面端解耦）
 
@@ -22,9 +23,9 @@
 
 1. 注册 [Chrome Web Store 开发者账号](https://chrome.google.com/webstore/devconsole)：
    Google 账号 + **一次性 5 美元注册费**（信用卡）。
-2. 准备一个**隐私政策页面**（商店强制要求）：把本文末尾的草稿发布到你的
-   GitHub Pages（`Luz7818.github.io` 仓库加一页 `keyvault-privacy.html`），
-   得到公开 URL。
+2. 准备一个**隐私政策页面**（商店强制要求）：把定稿原文
+   [`PRIVACY-POLICY.md`](PRIVACY-POLICY.md) 整页发布到你的 GitHub Pages
+   （`Luz7818.github.io` 仓库加一页 `keyvault-privacy.html`），得到公开 URL。
 
 ### 上传步骤（每次发版）
 
@@ -39,13 +40,11 @@
    - 单一用途说明：`KeyVault 是一个本地密钥保管箱：检测网页上复制的 API 密钥，
      在用户确认后加密存入浏览器本机数据库（IndexedDB），供用户随后搜索与复制。
      所有数据只保存在用户本机，不向任何服务器发送。`
-   - 权限理由（逐条，v2 权限面不变）：
-     - `storage`：保存解锁状态与扩展设置（不含密钥）。
-     - `alarms`：定时器——无操作自动锁定与剪贴板到期自动擦除。
-     - `clipboardWrite`：用户点复制后写入剪贴板；到期后覆盖擦除。
-     - `offscreen`：承载剪贴板擦除的页面（MV3 要求）。
-     - `host_permissions (<all_urls>)` + 内容脚本：只在用户复制动作发生时读取
-       该次复制文本以检测密钥；不读取页面其他内容，不注入任何页面行为。
+   - 权限理由（逐条）：**定稿见 [`CWS.md`](CWS.md)「逐权限理由」**——每条
+     标注代码位置（storage=仅 `chrome.storage.session` 三键；alarms=自动锁定
+     +30 秒擦除两个定时器；clipboardWrite=用户复制与无手势的擦除覆盖；
+     offscreen=只做擦除的屏外文档；`<all_urls>`=任意网站复制密钥的捕获场景，
+     不读页面其他内容、不发起任何网络请求）。CWS.md 是单源，改权限先改那里。
    - 数据使用声明：勾选「处理用户数据」→ 具体为「用户提供或网站内容产生的信息
      （复制的文本）」与「本地存储的用户活动」；**全部本地处理，不出本机，无远程
      服务器，无遥测**。隐私政策 URL 填你发布的页面。
@@ -68,13 +67,14 @@
    - 附件：`Browser_extension/dist/keyvault-browser-extension-v<版本>.zip`
      （桌面用户另附 `dist/kv.exe` / `dist/kv-cli.exe` / `dist/kv-host.exe`，
      版本随桌面端发布节奏，可能与扩展版本号不同）。
-   - 说明：指向 `Browser_extension/README.md` 的「真机走查」节（十步）。
+   - 说明：粘贴 [`CWS.md`](CWS.md)「版本发布说明」对应版本小节，并注明
+     真机走查状态（十步见 `Browser_extension/README.md`「真机走查」节）。
 3. 没装商店的人：下载 zip 解压 → 开发者模式加载解压缩的扩展。
 
 ## 发版检查单（每次）
 
 - [ ] `npm test`（Browser_extension 内，`node --test` 零依赖）全绿
-- [ ] 全部 36 个 JS `node --check` 通过
+- [ ] 全部 41 个 JS `node --check` 通过
 - [ ] 主仓门禁不受影响：`python -I -m unittest discover -s tests -t .` +
       `python kv.py selftest --golden`
 - [ ] `python -I Browser_extension/make_release.py` 产出新 zip
@@ -99,7 +99,10 @@ KeyVault 是一个**本地优先**的密钥保管箱：在网页上复制 API �
 • 快速使用：popup 搜索 → 一键复制 → 30 秒后剪贴板自动擦除（期间复制新内容
   则取消擦除，绝不覆盖你的新东西）
 • 两步验证：值是 base32 种子的记录自动出现 TOTP 活码（RFC 6238，倒计时环）
-• 批量导入：粘贴 .env / JSON / curl / AWS csv 一次入库
+• 密码生成器：拒绝采样的随机密码（长度 8–128、字符类开关、可排除易混淆
+  字符），复制走同一条 30 秒擦除通道，一键存入保管箱
+• 批量导入向导：Bitwarden CSV / JSON、otpauth:// 验证器导出、.env 文本，
+  格式自动识别；两步流程（解析预览 → 勾选确认），不可信条目不落盘
 • 泄露扫描：粘贴文本或选文件/目录，用已存指纹在本机逐行比对，命中逐条报告
 • 轮换与审计：轮换保留历史指纹；append-only 审计链可查可验
 • 加密备份：口令加密的 KVBE1 备份文件导出/恢复
@@ -107,20 +110,8 @@ KeyVault 是一个**本地优先**的密钥保管箱：在网页上复制 API �
 与桌面版（github.com/Luz7818/KeyVault）功能同源、数据各自独立。零外部依赖、
 无遥测、无任何网络请求。
 
-## 隐私政策草稿（发布到 GitHub Pages 后把 URL 填进商店）
+## 隐私政策（定稿）
 
-KeyVault 浏览器扩展隐私政策
-
-KeyVault 不收集、不传输、不出售任何数据。扩展处理的全部信息——你在网页上
-复制的文本、检测到的密钥、你输入的主密码派生密钥——只保存在你自己的浏览器
-本机存储（IndexedDB 与会话内存）中，不会发送到任何服务器。扩展没有遥测、
-没有统计、没有任何网络请求。
-
-- 复制的文本：仅在检测密钥的瞬间被读取，检测完成后不保留副本；你在确认条上
-  点「存入」后，该值经主密码派生密钥（AES-GCM-256）加密存入本机 IndexedDB。
-- 主密码：不存储明文，仅存储 PBKDF2（60 万次迭代）派生的密钥校验器。
-- 剪贴板：写入由你主动点击触发；到期自动擦除在你本机完成。
-- 泄露扫描：指纹比对完全在你本机进行，任何文本不离开你的浏览器。
-- 卸载扩展或使用扩展内「删除全部数据」即彻底删除本机全部数据。
-
-联系：仓库 github.com/Luz7818/KeyVault 的 Issues。
+提审用的隐私政策原文定稿在 [`PRIVACY-POLICY.md`](PRIVACY-POLICY.md)——发布
+到公开 URL 后把地址填进商店，商店表单逐项填写见 [`CWS.md`](CWS.md)
+「Privacy 面板逐项」。本文件不再保留草稿副本（单源，防两份漂移）。
