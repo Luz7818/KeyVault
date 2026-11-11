@@ -764,7 +764,8 @@ describe("剪贴板 TTL 擦除调度（C1#11/12）", () => {
 
 describe("自动锁定（C1#4 + alarm「kv-autolock」）", () => {
   it("未超时 → 不锁定", async () => {
-    await fireAlarm("kv-autolock"); // handleMessage 刚刷新过 last-active
+    // 本测试路径的消息不带 sender（SW 内部口径），仍会刷新 last-active
+    await fireAlarm("kv-autolock");
     const status = await handleMessage({ kind: "status" });
     assert.equal(status.unlocked, true);
   });
@@ -899,8 +900,9 @@ describe("reset 鉴权", () => {
     assert.deepEqual(await handleMessage({ kind: "copied" }), { ok: true, ttl: 30 });
     const pending = mock.sessionData.get("kv-pending-wipe");
     assert.deepEqual(await handleMessage({ kind: "reset", password: MASTER }), { ok: true });
-    // session 清空断言在 status/list 之前——每条消息本身都会 touchActivity
-    // 写入 kv-last-active（正常行为）；清空后只允许在飞擦除的 pending 残留
+    // session 清空断言在 status/list 之前——senderless 消息（本测试路径）
+    // 仍会 touchActivity 写入 kv-last-active（KVX-1：扩展页/SW 口径续命）；
+    // 清空后只允许在飞擦除的 pending 残留
     for (const key of mock.sessionData.keys()) {
       assert.equal(key, "kv-pending-wipe", `session 残留意外键：${key}`);
     }

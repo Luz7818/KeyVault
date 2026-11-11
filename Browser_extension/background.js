@@ -4,7 +4,8 @@
 // detectText（C4 唯一组合入口），其余全部落在 src/vault/。职责只有四件：
 // ① C1 全表 30 个动作的消息分发；② 捕获调度（开关/忽略站点 → 弹条或掩码行，
 // 候选绝不驻留 SW 内存——入库走 store 的重新检测，纯函数确定性）；
-// ③ 自动锁定（每分钟 alarm 检查 kv-last-active）与冷启动 sweep（pending
+// ③ 自动锁定（每分钟 alarm 检查 kv-last-active，只认扩展 UI 交互——KVX-1）
+//    与冷启动 sweep（pending
 // wipe 安全网 + 过期标记，对齐桌面 security.py:98「标记过期记录」与
 // cli.py expire 的常驻触发点）；④ 剪贴板 TTL 擦除的 alarm 调度与 offscreen
 // 文档的创建/复用、消息转发（擦除页面本身归 app-package）。
@@ -54,7 +55,8 @@ const session = new Session({
 
 // ---------------------------------------------------------------- 状态辅助
 
-/** 每处理一条消息刷新活动时间戳——自动锁定只认「最近一次扩展交互」。 */
+/** 刷新活动时间戳（何时刷新由 shouldTouchActivity 把关，见 KVX-1 注）——
+ * 自动锁定只认「最近一次扩展 UI 交互」。 */
 function touchActivity() {
   return chrome.storage.session.set({ [LAST_ACTIVE_KEY]: Date.now() });
 }
@@ -164,13 +166,20 @@ async function runWipeAlarm(alarmName) {
 
 // ---------------------------------------------------------------- 自动锁定与启动 sweep（C7）
 
+/** 空闲判定纯函数（KVX-1）：时钟由入参注入，tests/background-idle.test.js
+ * 直测边界——恰满 minutes 分钟算过期；minutes 0/负值 = 禁用；lastActive
+ * 非数值（会话刚开始，还没有活动痕迹）不判过期。 */
+export function isIdleExpired(lastActive, now, minutes) {
+  const m = Number(minutes);
+  if (!m || m <= 0) return false;
+  if (typeof lastActive !== "number") return false;
+  return now - lastActive >= m * 60000;
+}
+
 async function enforceAutolock() {
   const settings = await readSettings();
-  const minutes = Number(settings.autoLockMinutes);
-  if (!minutes || minutes <= 0) return; // 0 = 禁用
   const lastActive = await getLastActive();
-  if (lastActive === null) return; // 浏览器会话刚开始，还没有活动痕迹
-  if (Date.now() - lastActive < minutes * 60000) return;
+  if (!isIdleExpired(lastActive, Date.now(), settings.autoLockMinutes)) return;
   await session.lock();
 }
 
@@ -503,31 +512,53 @@ export const HANDLERS = {
 // 防御：内容脚本上下文即使出现中继缺陷，也拿不到完整 C1 面。
 const CONTENT_SCRIPT_ONLY = new Set(["capture", "store", "clipboard-changed"]);
 
-/** 返回拒绝文案；null = 放行。sender 缺省（SW 内部调用）视为可信。
- *
+/** 扩展页判据（popup/options/offscreen）：sender.url 必为
+ * chrome-extension://<id>/ 前缀，标签页里不是这个前缀的才是内容脚本。
  * 内容脚本的判据不能只看 sender.tab：Chromium 官方 schema 对
  * MessageSender.tab 的原文是「This property will only be present when the
  * connection was opened from a tab (including content scripts)」——它标记
  * 「从标签页发起」而非「内容脚本专属」，而 manifest 的 options_ui.open_in_tab
- * 为 true，管理页就活在标签页里，新版 Chrome 同样会为它置 tab。因此补一条
- * 页面来源判别：扩展页（popup/options/offscreen）的 sender.url 必为
- * chrome-extension://<id>/ 前缀，标签页里不是这个前缀的才是内容脚本。 */
+ * 为 true，管理页就活在标签页里，新版 Chrome 同样会为它置 tab。 */
+function isFromExtensionPage(sender) {
+  return typeof sender?.url === "string"
+    && sender.url.startsWith(`chrome-extension://${chrome.runtime.id}/`);
+}
+
+function isFromContentScript(sender) {
+  return sender?.tab != null && !isFromExtensionPage(sender);
+}
+
+/** 返回拒绝文案；null = 放行。sender 缺省（SW 内部调用）视为可信。 */
 function senderRejection(kind, sender) {
   if (!sender) return null;
-  const fromExtensionPage = typeof sender.url === "string"
-    && sender.url.startsWith(`chrome-extension://${chrome.runtime.id}/`);
-  const fromContentScript = sender.tab != null && !fromExtensionPage;
+  const fromContentScript = isFromContentScript(sender);
   if (CONTENT_SCRIPT_ONLY.has(kind)) {
     return fromContentScript ? null : `动作 ${kind} 只能由内容脚本发送`;
   }
   return fromContentScript ? `动作 ${kind} 只能由扩展页面发送` : null;
 }
 
+// KVX-1：自动锁定只认「扩展 UI 内的交互」。内容脚本转发的每条页面事件
+// （clipboard-changed/capture）默认不续命——否则用户在任意网页按 Ctrl+C
+// 都会重置 autoLockMinutes 计时，自动锁定形同虚设（1Password 的 idle 语义：
+// 页面活动 ≠ 库内交互）。唯一例外 "store"：捕获条「存入」按钮是用户对
+// vault 的显式拍板（content.js 的按钮点击，非页面事件），算交互。
+const CONTENT_USER_ACTIONS = new Set(["store"]);
+
+/** 该消息是否刷新 kv-last-active。sender 缺省（SW 内部调用）与扩展页消息
+ * 续命；内容脚本消息只有用户动作白名单里的 kind 续命。 */
+function shouldTouchActivity(kind, sender) {
+  if (!sender || !isFromContentScript(sender)) return true;
+  return CONTENT_USER_ACTIONS.has(kind);
+}
+
 /** C1 消息面唯一入口。锁定错误按 name 判定统一映射（C1）；
  * 其余异常翻译成 {error}，绝不让原始异常逃出消息通道。 */
 export async function handleMessage(msg, sender = null) {
   try {
-    await touchActivity();
+    if (shouldTouchActivity(msg.kind, sender)) {
+      await touchActivity();
+    }
   } catch (_) {
     // 活动时间戳写不进去只影响自动锁定计时，不该挡住消息本身
   }

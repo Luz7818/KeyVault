@@ -82,7 +82,7 @@
 | 泄露扫描 | `options.js` + `scan.js` | 粘贴 / 文件 / 目录三种输入；行界切块 + 贪心分批 + 逐批发送，失败逐条明示；吊销的旧值同样参与匹配 |
 | 剪贴板擦除 | `background.js` + `offscreen.js` | 复制后 30 秒 TTL 到点覆盖剪贴板；页面再次复制即取消（clipboard-changed）；擦除失败宁可不擦不错擦，启动 sweep 补擦 |
 | 两步验证码 | `src/vault/totp.js` | 详情抽屉「显示验证码」显式 reveal，活码每秒重绘、剩 5s 转琥珀 |
-| 自动锁定 | `background.js` | 每分钟 alarm 检查最近交互，超时锁定；解锁时补过期标记 sweep |
+| 自动锁定 | `background.js` | 每分钟 alarm 检查最近一次扩展 UI 交互（KVX-1：页面复制不续命），超时锁定；解锁时补过期标记 sweep |
 
 ## 门禁
 
@@ -91,8 +91,9 @@ cd Browser_extension
 npm test          # node --test，零依赖
 ```
 
-- 2026-11-09 实测：**16 个测试文件 504 条全绿**（tests 504 / pass 504 / fail 0）。
-- `node --check` 全部 36 个 JS（顶层 5 + src 15 + tests 16）语法通过。
+- 2026-11-12 实测：**17 个测试文件 514 条全绿**（tests 514 / pass 514 / fail 0；
+  2026-11-09 批为 16 文件 504 条，KVX-1 批新增 background-idle 10 条）。
+- `node --check` 全部 37 个 JS（顶层 5 + src 15 + tests 17）语法通过。
 - 金标：`tests/golden.test.js` 直读 `tests/corpus/` 桌面正本 92 条逐条对拍——
   桌面语料任何改动，浏览器侧测试立刻同响。
 - 机械红线有测试钉死：全部 `textContent` 无 `innerHTML`（app-content /
@@ -137,6 +138,12 @@ node 测试覆盖不到浏览器运行时（IndexedDB、chrome.*、offscreen、S
   `{ok:true,…}`、失败 `{error:"…"}`，原始异常绝不逃出消息通道（vault 锁定
   统一映射 `{error, locked:true}`）；sender 分级是纵深防御：`capture`/
   `store`/`clipboard-changed` 只接受内容脚本，其余动作只接受扩展页。
+- **自动锁续命口径（KVX-1）**：`kv-last-active` 只认扩展 UI 交互——扩展页
+  与 SW 消息续命；内容脚本页面事件（`clipboard-changed`/`capture`）一律
+  不续命（用户在任意网页按 Ctrl+C 不许把自动锁计时续回去），唯一例外是
+  捕获条「存入」（`store`——用户对 vault 的显式拍板）；空闲判定是时钟可
+  注入的纯函数 `isIdleExpired`。页面活动 ≠ 库内交互，双向口径由
+  `tests/background-idle.test.js` 钉死。
 - **剪贴板诚实声明**：浏览器的 `navigator.clipboard` 没有「排除系统剪贴板
   历史」的 API（桌面 `kv copy` 的 exclude_history 无等价物）——popup 文案
   明示「无法排除系统剪贴板历史」，不宣称等同桌面安全级。
