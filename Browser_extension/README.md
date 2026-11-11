@@ -131,6 +131,12 @@ node 测试覆盖不到浏览器运行时（IndexedDB、chrome.*、offscreen、S
   是唯一防线；恢复走正常入库（去重 + 审计链复用），不重新检测。
 - **明文边界**：明文只在解密瞬间存在于内存；不进日志、不进 `storage.session`
   （那里只有 raw key 的 b64、活动时间戳与擦除元数据）；候选绝不驻留 SW 内存。
+- **消息协议**：SW 消息面恰好 30 个动作，`background.js` 的 `HANDLERS` 表即
+  全表（`tests/app-background.test.js` 以 `Object.keys(HANDLERS)` 与
+  `ALL_KINDS` 逐项对拍钉死），增删动作必须同步该表；响应二元——成功
+  `{ok:true,…}`、失败 `{error:"…"}`，原始异常绝不逃出消息通道（vault 锁定
+  统一映射 `{error, locked:true}`）；sender 分级是纵深防御：`capture`/
+  `store`/`clipboard-changed` 只接受内容脚本，其余动作只接受扩展页。
 - **剪贴板诚实声明**：浏览器的 `navigator.clipboard` 没有「排除系统剪贴板
   历史」的 API（桌面 `kv copy` 的 exclude_history 无等价物）——popup 文案
   明示「无法排除系统剪贴板历史」，不宣称等同桌面安全级。
@@ -140,6 +146,10 @@ node 测试覆盖不到浏览器运行时（IndexedDB、chrome.*、offscreen、S
   转义面）；页内提示条挂在 Shadow DOM。
 - **检测纪律**：`detectText()` 是唯一组合入口；歧义候选不猜厂商——unknown
   拒绝落盘，ambiguous 显示「厂商未定」、存后可纠正。
+- **存储层隔离**：`db.js`（IndexedDB 真身）与 `memory-backend.js`（node 测试
+  替身）实现同一接口，`store.js` 之上的代码不感知后端差异（存储后端注入）；
+  浏览器侧持久层除全局 `indexedDB` 外不触碰任何 `chrome.*`；store 形状变更
+  必须递增 `DB_VERSION` 并在 `onupgradeneeded` 写迁移。
 - **版本纪律**：版本单源 `manifest.json`，`package.json` 仅镜像；扩展版本
   独立推进，桌面端版本按其单源 `kv/__init__.py` 在桌面发布时同步（发版指南
   见 [PUBLISHING.md](PUBLISHING.md)）。

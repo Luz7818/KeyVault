@@ -97,7 +97,7 @@ stdlib 零依赖）；外科手术式改动（不动无关代码，每行改动�
 | CI | GitHub Actions（windows-latest：全量 unittest + 金标） | `.github/workflows/ci.yml` |
 | 运行时依赖 | 零（stdlib only） | — |
 | Python | 3.12+ | `python --version` |
-| 源文件 | 129 个 `.py` + 1 个 `.sql` | `find . -name "*.py" -not -path "*/__pycache__/*" \| wc -l` |
+| 源文件 | 130 个 `.py` + 1 个 `.sql` | `find . -name "*.py" -not -path "*/__pycache__/*" \| wc -l` |
 | scan 基准 | 10 000 指纹 × 200 文件 / 1.2 MB → **3.0 s**（i9-13900H / 32 GB / NVMe SSD，2026-10-12 实测；其中 ~2.4 s 是 1 万次 DPAPI 解密，遍历+匹配本体 ~0.6 s，`--fake` 对照 0.65 s） | `python tests/bench_scan.py` |
 | 版本 | `0.3.0` / `SCHEMA_VERSION=1` | `python kv.py --version` |
 | 版本控制 | 2026-10-05 起 git 建档（main） | `git log --oneline` |
