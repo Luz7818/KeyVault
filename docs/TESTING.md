@@ -14,7 +14,7 @@
 ## 运行命令
 
 ```bash
-python -I -m unittest discover -s tests -t .        # 全量，预期 OK (skipped=2)
+python -I -m unittest discover -s tests -t .        # 全量，预期 OK（skip 数随桌面状态 2~5 浮动）
 python kv.py selftest --golden                      # 金标，预期全过
 python -I -m unittest tests.test_cli_m4 -v          # 单模块
 ```

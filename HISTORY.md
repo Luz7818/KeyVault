@@ -918,3 +918,35 @@ sp(18) 滑入的同时旧页向左微退 sp(8)，新页左缘露出的条带是�
   真机走查十步/门禁/加密边界与设计红线）；`Browser_extension/PUBLISHING.md`
   随发布流程变化重写（打包命令加 `-I`、版本纪律与桌面端解耦、检查单对齐
   新门禁与十步走查、商店描述补泄露扫描）。
+
+## 2026-11-12 · 扩展侧修复与功能批 + CWS 提审材料定稿（补记）
+
+- 本条为补记：2026-11-11/12 的 7 个提交（9c1ded9 → fcda19b）当时未按维护规则追加
+  HISTORY，2026-11-15 文档核对时补齐。各项内容与缘由：
+  - **KV4-1**（9c1ded9）：主仓门禁确定性红——`test_host_e2e` 的剪贴板 skip 守卫
+    死代码改为进程内探针，skip 判定不再依赖环境巧合。
+  - **KV5-1**（3e949e8）：扩展 CSS 令牌归仓批2——立三缓动 + 四档动效令牌，
+    16 处时长散值 + 13 处隐式 ease 贴梯归仓，`options.css` 补 reduced-motion 杀块。
+  - **KV4-2/KV4-4**（857a8fe，docs）：源文件数对账清零（当时 130 个 `.py`），
+    消息协议与存储层契约并入 Browser_extension README 设计红线节。
+  - **KVX-1**（957537d）：自动锁被页面事件续命修复——`touchActivity` 按
+    sender/kind 条件化（内容脚本页面复制不续命，仅捕获条「存入」例外）+
+    `isIdleExpired` 改可注入时钟纯函数，`background-idle` 专测 10 条钉死双向口径。
+  - **KV4-6**（2290af8）：`ClipboardError` 归入 `KvError` 错误体系——宿主把
+    「剪贴板被占用」透传为可读文案而非宿主内部错误（含脱敏用例 + 宿主联动测试），
+    顺带对账 README/AGENTS/TESTING 规模数字（当时 660 条 / 23 268 行）。
+  - **批2 功能**（d98704a）：扩展密码生成器（`crypto.getRandomValues` + 拒绝采样
+    无模偏差，长度 8–128 默认 20，四字符类 + 排除易混淆，每类至少一枚 + 熵粗估，
+    popup/options 双入口，`settings.generator` 归 C7 第四字段）+ 导入向导
+    （Bitwarden CSV/JSON、otpauth:// 清单、.env 四格式自动识别，两步预览勾选
+    逐条 store-direct，skipped 只带掩码预览；`parseSeed` 加 otpauth:// URI 分支）。
+    打包清单随之 27 → 29 文件（`generator.js`、`importers.js` 入列）。
+  - **CWS 提审材料**（fcda19b，docs）：`CWS.md` 逐权限理由定稿（storage 仅
+    session 三键 / alarms 两定时器 / clipboardWrite 含无手势擦除 / offscreen 唯一
+    文档 / `<all_urls>` 声明用途与实际行为逐条对位带行号）+ `PRIVACY-POLICY.md`
+    发布原文定稿 + 版本发布说明 v1.0.0，`PUBLISHING.md` 改单源指向，商店描述与
+    功能实况对齐。
+- 门禁实测（2026-11-15 复核）：主仓 `Ran 660, OK (skipped=3)`；扩展 `npm test`
+  19 文件 564 条全绿（suites 88）；41 个 JS `node --check` 全过；
+  `selftest --golden` 92 条全 PASS。
+

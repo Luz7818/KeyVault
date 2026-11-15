@@ -1,4 +1,4 @@
-# tests/ —— 测试套件：587 条用例 + 金标语料
+# tests/ —— 测试套件：660 条用例 + 金标语料
 
 > 用途：说明本目录在整个项目里管哪一段,以及每个文件干什么。
 
@@ -17,7 +17,15 @@ tests 包含 kv 项目的全部测试：单元测试、集成测试、CLI 端到
 | `test_cli_m3.py` | M3 验收：import/use/rotate/revoke 端到端 | — |
 | `test_cli_m4.py` | M4 验收：scan/audit/expire/purge 端到端 | — |
 | `test_cli_backup.py` | export/restore 端到端：口令校验、跨库恢复、去重 | — |
+| `test_cli_host.py` | `kv host install/uninstall/status`：manifest 生成与注册表动作 | — |
 | `test_gui_tabbar.py` | TabBar 堆叠序回归：初始标签内容必须可见 | 需要显示环境（无则 skip） |
+| `test_gui_interactions.py` | GUI 交互层：排序指示、搜索占位符、键盘绑定接线 | 需要显示环境（无则 skip） |
+| `test_gui_sidebar.py` | 侧边栏行命中回归：整行可点、行外不误触、hover 随指针、重绘合帧 | 需要显示环境（无则 skip） |
+| `test_gui_statbar.py` | statbar 数据聚合：指标卡口径与平台分布的环形图切分 | — |
+| `test_gui_totp.py` | TOTP GUI 面：活码窗面板 + 复制后的剪贴板倒计时 | 仅 Windows 运行 |
+| `test_host_protocol.py` | native messaging 帧协议：往返、EOF、坏帧 | — |
+| `test_host_service.py` | 宿主请求分发：捕获 → spool → approve/reject → list/copy 全链 | — |
+| `test_host_e2e.py` | 宿主端到端：以真子进程跑 `kv_host.py`，stdio 上走完整协议 | 仅 Windows 运行（剪贴板探针随环境 skip） |
 | `bench_scan.py` | `kv scan` 性能基准：造 N 条密钥的 vault + 目录树并计时 | 不进 discover（名字不以 test 开头）；数字口径见 AGENTS |
 | `test_console.py` | console 模块：表格输出、掩码渲染、用户交互 | — |
 | `test_capture_watch.py` | watch 循环：自动检测、手动操作、spool 模式 | — |

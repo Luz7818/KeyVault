@@ -7,7 +7,9 @@
 
 - 正在做：两个扩展的真机手动走查——Browser_extension v2 按 `Browser_extension/README.md`
   「真机走查（待办）」十步（**尚未执行**），extension/ 桌面伴侣版按 GET-START §4.8
-- 下一个：推送 + Release（待确认）；桌面端版本同步仍按旧约定，发布时一起升
+- 下一个：CWS 提审 + 扩展 v1.0.0 Release（提审材料已定稿：`Browser_extension/CWS.md` /
+  `PRIVACY-POLICY.md`；仓已推送，origin/main 无未推提交——2026-11-15 实测）；
+  桌面端版本同步仍按旧约定，发布时一起升
 
 ## 任务计划
 
@@ -19,6 +21,9 @@
 
 ## 完成记录
 
+- [x] 扩展修复与功能批：KV4-1 宿主 e2e 剪贴板探针改进程内（门禁确定性）+ KV5-1 扩展 CSS 动效令牌归仓 + KVX-1 自动锁续命口径（页面复制不续命，isIdleExpired 纯函数 + 10 条专测）+ KV4-6 ClipboardError 归入 KvError 体系—— 2026-11-12
+- [x] 扩展批2 功能：密码生成器（拒绝采样，8–128 默认 20，四字符类 + 排除易混淆，popup/options 双入口）+ 导入向导（Bitwarden CSV/JSON、otpauth://、.env 自动识别，两步预览勾选）；打包清单 27 → 29 文件—— 2026-11-12
+- [x] CWS 提审材料定稿：逐权限理由带行号、Privacy 面板逐项、隐私政策发布原文、版本发布说明 v1.0.0；PUBLISHING 改单源指向—— 2026-11-12
 - [x] Browser_extension v2 全新重写（用户决策推倒重来；v1.0.0：检测大脑与桌面逐字节同源 + WebCrypto vault + 八区管理页 + make_release 打包；npm test 504 条全绿、36 个 JS node --check 全过；真机走查待办）—— 2026-11-09
 - [x] Browser_extension 独立浏览器插件版（检测大脑 JS 移植 parity IDENTICAL / WebCrypto vault / 捕获提示条 / options 全功能管理页，node 61 全绿）—— 2026-11-03
 - [x] 浏览器扩展批（原生消息宿主 kv/host/ + MV3 扩展 extension/ + 打包六查）—— 2026-11-02

@@ -152,6 +152,10 @@ popup 可搜索已存密钥并一键复制（同样走 30 秒自动擦除）。
 
 卸载：`python kv.py host uninstall`；状态：`python kv.py host status`。
 
+没有桌面软件也可以用：`Browser_extension/` 是**独立浏览器版**（主密码 + AES-GCM 加密的浏览器内
+保管箱，不需要 Python 与宿主进程），装法与功能见
+[Browser_extension/README.md](../Browser_extension/README.md)。
+
 ## 5. 想改它:常见三种改动
 
 ### 5.1 加一条检测规则
@@ -204,4 +208,4 @@ python -I -m unittest tests.test_your_module -v
 python -I -m unittest discover -s tests -t .
 ```
 
-通过标准：退出码 0、548 个用例通过（允许 2 个 skip）。这几条命令的含义写在仓库根的 `AGENTS.md`。
+通过标准：退出码 0。用例数以仓库根 `AGENTS.md` 的「当前状态」为准（2026-11-15 实测 660 条，skip 数随桌面状态 2~5 浮动，0 失败）。

@@ -15,11 +15,14 @@ CLI（`kv.py` → `kv/cli.py` 的 argparse 命令树）与桌面 GUI（`kv_gui.p
 ```
 KeyVault/
 ├── kv/                主包（capture/ commands/ core/ crypto/ detect/ gui/ ops/ parse/）
+├── extension/         浏览器扩展（桌面伴侣版，MV3，连本机宿主）
+├── Browser_extension/ 浏览器扩展（独立浏览器版，浏览器内 vault，不需要桌面软件）
 ├── packaging/         打包链路：build.bat + kv.spec（详见 packaging/README.md）
 ├── tests/             测试套件（含金标语料 corpus/ 与 runtests.py 入口 shim）
 ├── build/ dist/       PyInstaller 产物，不入库（.gitignore 已排除）
 ├── kv.py              CLI 启动 shim：修正 sys.path + 强制 UTF-8 后调 kv.cli.main()
 ├── kv_gui.py          GUI 启动 shim
+├── kv_host.py         原生消息宿主启动 shim（浏览器扩展连接器，详见「浏览器扩展与原生消息宿主」节）
 └── (九件文档)         README / AGENTS / 目录说明 / HISTORY / TODO / docs/
 ```
 
@@ -27,6 +30,7 @@ KeyVault/
 |---|---|
 | `kv.py` | CLI 入口。直接 `python -m kv` 会因 cp936 踩编码坑，一律走这个 shim |
 | `kv_gui.py` | GUI 入口 shim |
+| `kv_host.py` | 宿主入口 shim（承接冻结态 `_wipe` 分发与 `--version`，与 `kv_gui.py` 成对） |
 | `kv/__init__.py` | 版本号常量（单源，升版只改这里）、`SCHEMA_VERSION=1`、`PROGRAM="kv"` 的常量单源 |
 
 打包链路（`packaging/build.bat` + `packaging/kv.spec`）与测试入口（`tests/runtests.py`）
@@ -66,7 +70,9 @@ kv.py / kv_gui.py（shim）
 | 子目录 | 说明 |
 |---|---|
 | `kv/` | [`kv/README.md`](../kv/README.md)（9 个子包逐个说明） |
-| `extension/` | [`extension/README.md`](../extension/README.md)（浏览器扩展，MV3） |
+| `extension/` | [`extension/README.md`](../extension/README.md)（浏览器扩展，桌面伴侣版，MV3） |
+| `Browser_extension/` | [`Browser_extension/README.md`](../Browser_extension/README.md)（浏览器扩展，独立浏览器版） |
+| `packaging/` | [`packaging/README.md`](../packaging/README.md) |
 | `tests/` | [`tests/README.md`](../tests/README.md) |
 | `docs/` `build/` `dist/` | 豁免（见 `.docsignore`；docs 是文档目录本身，build/dist 是产物） |
 

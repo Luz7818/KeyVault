@@ -29,13 +29,14 @@ kv 是项目的核心 Python 包。它接收 CLI 命令（来自 `kv.py` shim �
 | `detect/` | 检测规则定义、多阶段解析、用户纠正、报告格式化 |
 | `gui/` | tkinter 桌面 GUI（叶子模块），侧边栏导航 + 6 个功能页 |
 | `host/` | 浏览器扩展的原生消息宿主：帧协议、请求分发、注册表/manifest 管理 |
-| `ops/` | 操作命令：save、scan、rotate、import、inject、expiry、purge、fix、review |
+| `ops/` | 操作命令：save、scan、rotate、import、inject、expiry、purge、fix、review、backup、totp、health |
 | `parse/` | 输入解析：dotenv、AWS CSV、curl、JSON、bare 文本、pipeline 编排 |
 
 ## 和谁打交道
 
 - **上游**：`kv.py`（CLI shim）、`kv_gui.py`（GUI shim）和 `python -m kv` 调用入口
-- **下游**：所有命令最终操作 `vault/` 下的 SQLite 数据库和 `.kv/` 目录
+- **下游**：所有命令最终操作 vault 数据目录（默认 `%LOCALAPPDATA%\KeyVault\`，可用
+  `--vault-dir` / `KV_VAULT_DIR` 改）下的 SQLite 数据库
 - **改这里之后要跑**：`python -I -m unittest discover -s tests -t .`
 
 ## 别动
